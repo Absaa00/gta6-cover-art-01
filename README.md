@@ -1,49 +1,36 @@
-# Vice Cover Studio — GTA 6-style cover art maker
+# Vice Cover Forge
 
-[![make.fun](https://img.shields.io/badge/make.fun-bounty-ff5e3a)](https://make.fun/bounty/gta6-cover-art-01)
+[![make.fun](https://make.fun/badge.svg)](https://make.fun/bounty/gta6-cover-art-01)
 
-An offline web app that turns your photo + caption into a multi-panel poster
-cover in the style of GTA 6 posters: bold slanted lettering, a Vice City
-sunset / neon colour grade, and export as PNG in 1080×1080, 1080×1350 and
-1920×1080.
+Turn a photo and a caption into a multi-panel cover in the style of a Vice City sunset poster — bold lettering, neon colour grades, PNG export. Built for the [make.fun bounty](https://make.fun/bounty/gta6-cover-art-01).
 
 ## What it does
 
-- Upload your own photos (file picker or drag-drop) or use the two bundled
-  sample photos. Photos are read on your machine and never leave it.
-- Three multi-panel layouts: **Hero + Duo** (one big panel, two stacked),
-  **Grid 2×2**, and **Strip ×3**.
-- Per-panel crop: zoom, shift, drag the photo inside its panel, replace the
-  photo per panel.
-- Editable title + subtitle, title size, top/bottom caption banner.
-- Three colour grades: **Sunset**, **Neon**, **Dusk**.
-- Live preview; one-click PNG export in the three common post sizes.
+- **Upload a photo** (file picker or drag-and-drop onto the preview). Photos are read locally and never leave the machine.
+- **3 multi-panel layouts**: Hero + Duo, Grid 2×2, Strip ×3.
+- **Per-panel control**: pick a photo per panel (bundled samples, a drawn skyline, or your uploads), zoom and pan each panel.
+- **Editable lettering**: title + subtitle, drawn bold on canvas with system fonts only.
+- **3 colour grades**: Sunset, Neon, Dusk.
+- **Live preview** and **PNG export** at 1080×1080, 1080×1350, and 1920×1080.
 
-## Originality
-
-All lettering is drawn on canvas with system fonts. No Rockstar logo,
-wordmark, artwork or font is used anywhere. The two sample photos were made
-for make.fun with an image model and are free to use.
+All artwork and lettering is original or drawn in code. No Rockstar logo, artwork, or font is used. The two bundled sample photos were made for make.fun and are free to use.
 
 ## Run it
 
-Serve the `app/` folder with any static server and open `index.html` in
-desktop Chrome. No build step, no network requests.
-
 ```sh
-cd app && python3 -m http.server 8080
+node serve.ts
 # open http://localhost:8080
 ```
 
-## Hand-in program
+No build step, no network, no dependencies — plain static files under `app/`.
 
-`main.ts` (Node 22, standard library only) copies `app/` and `screenshots/`
-to the output directory and writes `dossier.json` with the vendored
-make.fun library:
+## Hand in
 
 ```sh
-MAKEFUN_OUTPUT_DIR=out node main.ts
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ```
+
+`main.ts` copies `app/` and `screenshots/` to the output directory and writes `dossier.json` with the kit's vendored make.fun library. It is deterministic: two runs produce byte-identical output.
 
 ## License
 
