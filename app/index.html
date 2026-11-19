@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vice Cover Studio — GTA 6-style cover art maker</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">VC</span>
+    <div>
+      <h1>Vice Cover Studio</h1>
+      <p>Turn your photo + caption into GTA 6-style poster cover art. 100% offline.</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button id="exportBtn" class="btn primary" type="button">Export PNG</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="stage-wrap">
+    <div id="dropZone" class="drop-zone" tabindex="0" aria-label="Drop photos here or click to choose">
+      <canvas id="preview" width="1080" height="1080"></canvas>
+      <div id="emptyHint" class="empty-hint">
+        <strong>Drop photos here</strong>
+        <span>or click to choose from your machine — nothing is uploaded</span>
+      </div>
+    </div>
+    <p class="stage-help">Click a panel to select it · drag on the preview to move the photo · scroll to zoom · <span id="sizeLabel">1080 × 1080</span></p>
+    <input id="fileInput" type="file" accept="image/*" multiple hidden>
+  </section>
+
+  <aside class="controls">
+    <section class="card">
+      <h2>1 · Photos</h2>
+      <div class="row">
+        <button id="addPhotosBtn" class="btn" type="button">Add photos…</button>
+        <button id="samplePierBtn" class="btn ghost" type="button">Sample: Pier</button>
+        <button id="sampleBlvdBtn" class="btn ghost" type="button">Sample: Boulevard</button>
+      </div>
+      <div id="photoTray" class="tray" aria-label="Loaded photos"></div>
+      <p class="hint">Photos stay on your machine. Click a thumbnail, then a panel, to place it.</p>
+    </section>
+
+    <section class="card">
+      <h2>2 · Layout</h2>
+      <div class="seg" id="layoutSeg" role="group" aria-label="Layout">
+        <button data-layout="hero" class="seg-btn active" type="button">Hero + Duo</button>
+        <button data-layout="grid" class="seg-btn" type="button">Grid 2×2</button>
+        <button data-layout="strip" class="seg-btn" type="button">Strip ×3</button>
+      </div>
+      <h2 class="sub">Selected panel</h2>
+      <div class="seg" id="panelSeg" role="group" aria-label="Panel"></div>
+      <label class="field">Photo in this panel
+        <select id="panelPhotoSelect"></select>
+      </label>
+      <label class="field">Zoom <span id="zoomVal" class="val">1.00×</span>
+        <input id="zoomRange" type="range" min="1" max="3" step="0.01" value="1">
+      </label>
+      <label class="field">Move sideways <span id="offXVal" class="val">0</span>
+        <input id="offXRange" type="range" min="-0.5" max="0.5" step="0.01" value="0">
+      </label>
+      <label class="field">Move up / down <span id="offYVal" class="val">0</span>
+        <input id="offYRange" type="range" min="-0.5" max="0.5" step="0.01" value="0">
+      </label>
+      <div class="row">
+        <button id="fillAllBtn" class="btn ghost" type="button">Same photo in all panels</button>
+        <button id="resetCropBtn" class="btn ghost" type="button">Reset crop</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3 · Caption &amp; grade</h2>
+      <label class="field">Title
+        <input id="titleInput" type="text" value="Sunset Heist" maxlength="28" autocomplete="off">
+      </label>
+      <label class="field">Subtitle
+        <input id="subtitleInput" type="text" value="A Sunset City story" maxlength="48" autocomplete="off">
+      </label>
+      <div class="seg" id="gradeSeg" role="group" aria-label="Colour grade">
+        <button data-grade="sunset" class="seg-btn active" type="button">Sunset</button>
+        <button data-grade="neon" class="seg-btn" type="button">Neon</button>
+        <button data-grade="dusk" class="seg-btn" type="button">Dusk</button>
+      </div>
+      <label class="field">Title size <span id="titleSizeVal" class="val">100%</span>
+        <input id="titleSizeRange" type="range" min="60" max="140" step="5" value="100">
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>4 · Export</h2>
+      <div class="seg" id="sizeSeg" role="group" aria-label="Export size">
+        <button data-size="1080x1080" class="seg-btn active" type="button">1080 × 1080</button>
+        <button data-size="1080x1350" class="seg-btn" type="button">1080 × 1350</button>
+        <button data-size="1920x1080" class="seg-btn" type="button">1920 × 1080</button>
+      </div>
+      <button id="exportBtn2" class="btn primary wide" type="button">Export PNG</button>
+      <p id="statusLine" class="status" role="status">Ready — add a photo to start.</p>
+    </section>
+  </aside>
+</main>
+
+<footer class="foot">
+  <span>Original art &amp; lettering drawn on canvas — no Rockstar logo, artwork or font.</span>
+  <span>Photos never leave your device.</span>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
