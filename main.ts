@@ -1,52 +1,40 @@
-// Vice Cover Studio — make.fun entry program (Node 22, standard library only).
+// Vice Cover Studio — hand-in program for make.fun competition gta6-cover-art-01.
+// Node 22, standard library only. Copies this repo's app/ and screenshots/
+// into the output directory and writes /output/dossier.json with the vendored
+// make.fun library (vendor/makefun-app.ts, unchanged from the kit).
 //
-// The entry is a static offline web app under app/ (index.html + app.js +
-// styles.css + sample photos) and 3-4 screenshots under screenshots/. This
-// program hands it in: it copies app/ and screenshots/ from beside this file
-// into /output (or MAKEFUN_OUTPUT_DIR outside the grader) and writes
-// /output/dossier.json with buildDossier from the vendored make.fun library.
-//
-// The copy is deterministic: entries are visited in sorted path order and no
-// timestamps are written anywhere, so two runs produce byte-identical output.
-//
-// Run it from the repository root:
+// Outside the grader, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   MAKEFUN_OUTPUT_DIR=out node main.ts
+// The program is deterministic: same repo contents in, byte-identical output out.
 
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
 
-const repoRoot = fileURLToPath(new URL('.', import.meta.url));
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const here = fileURLToPath(new URL('.', import.meta.url));
+const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-// Gate caps from the competition kit (reference/gate.json): the dossier
-// builder enforces them so a bad bundle is refused here, not by the scorer.
-const DOSSIER_CAPS = {
-  text_max_bytes: 163840,
-  screenshots: { max: 4, max_bytes: 262144 },
-  app_max_files: 993,
-  app_max_bytes: 50331648,
-  app_path_max_bytes: 1000,
-};
+// Start from a clean output directory so stale files can never leak in.
+rmSync(out, { recursive: true, force: true });
+mkdirSync(out, { recursive: true });
 
-function copyTreeSorted(fromDir: string, toDir: string): void {
-  mkdirSync(toDir, { recursive: true });
-  const names = readdirSync(fromDir).sort();
-  for (const name of names) {
-    const from = join(fromDir, name);
-    const to = join(toDir, name);
-    if (statSync(from).isDirectory()) copyTreeSorted(from, to);
-    else copyFileSync(from, to);
-  }
+cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
+mkdirSync(join(out, 'screenshots'), { recursive: true });
+if (existsSync(join(here, 'screenshots'))) {
+  cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 }
 
-mkdirSync(outDir, { recursive: true });
-copyTreeSorted(join(repoRoot, 'app'), join(outDir, 'app'));
-mkdirSync(join(outDir, 'screenshots'), { recursive: true });
-if (existsSync(join(repoRoot, 'screenshots'))) {
-  copyTreeSorted(join(repoRoot, 'screenshots'), join(outDir, 'screenshots'));
-}
-
-writeFileSync(join(outDir, 'dossier.json'), buildDossier(outDir, DOSSIER_CAPS));
-console.log(`Wrote ${outDir}/dossier.json`);
+// The scorer's own caps: only text_max_bytes shapes bytes; the other limits
+// refuse an entry the scorer would refuse (more than 4 screenshots or one
+// over 256 KiB; app/ over 993 files or 48 MiB, or a path over 1000 bytes).
+writeFileSync(
+  join(out, 'dossier.json'),
+  buildDossier(out, {
+    text_max_bytes: 163840,
+    screenshots: { max: 4, max_bytes: 262144 },
+    app_max_files: 993,
+    app_max_bytes: 50331648,
+    app_path_max_bytes: 1000,
+  }),
+);

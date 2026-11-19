@@ -1,570 +1,437 @@
-// Vice Cover Studio — GTA 6-style multi-panel cover art maker.
-// Everything runs offline in the browser: photos are read on the user's own
-// machine, the cover is drawn on a <canvas>, and export is a PNG download.
-// Lettering is drawn with system fonts; no Rockstar logo, artwork or font.
-'use strict';
+// Vice Cover Studio — GTA-style multi-panel cover art maker.
+// All drawing happens on this machine: photos are read from local files or the
+// bundled samples and never uploaded anywhere. No network requests at all.
+(function () {
+  'use strict';
 
-const $ = (id) => document.getElementById(id);
-const preview = $('preview');
-const pctx = preview.getContext('2d');
+  var SAMPLES = { boulevard: 'samples/boulevard.jpg', pier: 'samples/pier.jpg' };
 
-const SAMPLES = { pier: 'samples/pier.jpg', boulevard: 'samples/boulevard.jpg' };
-const SIZES = { '1080x1080': [1080, 1080], '1080x1350': [1080, 1350], '1920x1080': [1920, 1080] };
+  var GRADES = {
+    sunset: {
+      skyTop: '#2b0a3d', skyMid: '#c62b5e', skyLow: '#ff7a2f',
+      sun: '#ffd23e', sunGlow: 'rgba(255, 190, 60, 0.55)',
+      ray: 'rgba(255, 210, 62, 0.10)', overlay: 'rgba(255, 110, 40, 0.20)',
+      accent: '#ffd23e', title: '#ffffff', banner: 'rgba(20, 6, 32, 0.86)'
+    },
+    neon: {
+      skyTop: '#0b0626', skyMid: '#5b0f8a', skyLow: '#ff2ea6',
+      sun: '#2de2ff', sunGlow: 'rgba(45, 226, 255, 0.55)',
+      ray: 'rgba(45, 226, 255, 0.10)', overlay: 'rgba(255, 46, 166, 0.22)',
+      accent: '#2de2ff', title: '#ffffff', banner: 'rgba(10, 4, 28, 0.86)'
+    },
+    dusk: {
+      skyTop: '#070a1e', skyMid: '#2c1a5e', skyLow: '#7a4fd0',
+      sun: '#ffb3c8', sunGlow: 'rgba(255, 179, 200, 0.45)',
+      ray: 'rgba(180, 140, 255, 0.10)', overlay: 'rgba(90, 60, 200, 0.22)',
+      accent: '#ffb3c8', title: '#ffffff', banner: 'rgba(7, 8, 26, 0.86)'
+    }
+  };
 
-// Panels are rectangles in fractions of the cover (x, y, w, h).
-const LAYOUTS = {
-  hero: [
-    { x: 0, y: 0, w: 0.62, h: 1 },
-    { x: 0.62, y: 0, w: 0.38, h: 0.5 },
-    { x: 0.62, y: 0.5, w: 0.38, h: 0.5 },
-  ],
-  grid: [
-    { x: 0, y: 0, w: 0.5, h: 0.5 },
-    { x: 0.5, y: 0, w: 0.5, h: 0.5 },
-    { x: 0, y: 0.5, w: 0.5, h: 0.5 },
-    { x: 0.5, y: 0.5, w: 0.5, h: 0.5 },
-  ],
-  strip: [
-    { x: 0, y: 0, w: 1 / 3, h: 1 },
-    { x: 1 / 3, y: 0, w: 1 / 3, h: 1 },
-    { x: 2 / 3, y: 0, w: 1 / 3, h: 1 },
-  ],
-};
-
-const GRADES = {
-  sunset: { top: '#ffb347', mid: '#ff7a18', bottom: '#ff2e88', glow: '#ffd166' },
-  neon: { top: '#22d3ee', mid: '#a855f7', bottom: '#ff2e88', glow: '#67e8f9' },
-  dusk: { top: '#7c3aed', mid: '#312e81', bottom: '#0f172a', glow: '#c4b5fd' },
-};
-
-const state = {
-  photos: [], // { name, img, url }
-  pickedPhoto: 0,
-  panels: [0, 1, 2, 3].map(() => ({ photo: 0, zoom: 1, ox: 0, oy: 0 })),
-  selectedPanel: 0,
-  layout: 'hero',
-  grade: 'sunset',
-  size: '1080x1080',
-  title: 'Sunset Heist',
-  subtitle: 'A Sunset City story',
-  titleScale: 1,
-};
-
-const params = new URLSearchParams(location.search);
-const shotMode = params.get('shot') === 'cover' ? 'cover' : params.get('shot') === 'editor' ? 'editor' : null;
-
-function panelRects() { return LAYOUTS[state.layout]; }
-
-function drawPhotoInto(ctx, img, rx, ry, rw, rh, panel) {
-  const iw = img.naturalWidth || img.width;
-  const ih = img.naturalHeight || img.height;
-  const base = Math.max(rw / iw, rh / ih) * panel.zoom;
-  const dw = iw * base;
-  const dh = ih * base;
-  let dx = rx + (rw - dw) / 2;
-  let dy = ry + (rh - dh) / 2;
-  const maxOx = Math.max(0, (dw - rw) / 2);
-  const maxOy = Math.max(0, (dh - rh) / 2);
-  dx += Math.max(-maxOx, Math.min(maxOx, panel.ox * rw));
-  dy += Math.max(-maxOy, Math.min(maxOy, panel.oy * rh));
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(rx, ry, rw, rh);
-  ctx.clip();
-  ctx.drawImage(img, dx, dy, dw, dh);
-  ctx.restore();
-}
-
-function drawPlaceholderPanel(ctx, rx, ry, rw, rh, seed) {
-  const g = GRADES[state.grade];
-  const grad = ctx.createLinearGradient(rx, ry, rx, ry + rh);
-  grad.addColorStop(0, g.top);
-  grad.addColorStop(0.55, g.mid);
-  grad.addColorStop(1, g.bottom);
-  ctx.fillStyle = grad;
-  ctx.fillRect(rx, ry, rw, rh);
-  // Sun disc + skyline blocks, drawn shapes only.
-  const sunR = Math.min(rw, rh) * 0.22;
-  const sunX = rx + rw * (0.3 + 0.4 * ((seed * 37) % 10) / 10);
-  const sunY = ry + rh * 0.42;
-  ctx.fillStyle = g.glow;
-  ctx.beginPath();
-  ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(20, 8, 40, 0.85)';
-  const baseY = ry + rh * 0.72;
-  for (let i = 0; i < 5; i++) {
-    const bw = rw / 5;
-    const bh = rh * (0.12 + 0.16 * (((seed + i) * 53) % 10) / 10);
-    ctx.fillRect(rx + i * bw + bw * 0.08, baseY + (rh * 0.28 - bh), bw * 0.84, bh);
+  // Four panel slots; layouts use the first 3 or all 4.
+  function freshPanel(sample) {
+    return { sample: sample, uploadUrl: null, image: null, zoom: 1.2, dx: 0, dy: 0 };
   }
-  ctx.fillRect(rx, baseY + rh * 0.26, rw, rh * 0.02);
-}
 
-function applyGrade(ctx, W, H) {
-  const g = GRADES[state.grade];
-  ctx.save();
-  const grad = ctx.createLinearGradient(0, 0, W * 0.25, H);
-  grad.addColorStop(0, g.top);
-  grad.addColorStop(0.55, g.mid);
-  grad.addColorStop(1, g.bottom);
-  ctx.globalCompositeOperation = 'soft-light';
-  ctx.globalAlpha = 0.55;
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
-  ctx.globalCompositeOperation = 'overlay';
-  ctx.globalAlpha = 0.28;
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
-  ctx.restore();
-  // Vignette.
-  const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
-  vg.addColorStop(0, 'rgba(0,0,0,0)');
-  vg.addColorStop(1, 'rgba(10,4,24,0.38)');
-  ctx.fillStyle = vg;
-  ctx.fillRect(0, 0, W, H);
-}
+  var state = {
+    layout: 'hero',
+    grade: 'sunset',
+    title: 'VICE NIGHTS',
+    subtitle: 'A SUNSET STORY IN THREE PANELS',
+    titleSize: 104,
+    captionPos: 'bottom',
+    activePanel: 0,
+    panels: [freshPanel('boulevard'), freshPanel('pier'), freshPanel('boulevard'), freshPanel('pier')]
+  };
 
-function fitFont(ctx, text, maxWidth, startPx, family, weight) {
-  let px = startPx;
-  ctx.font = `${weight} ${px}px ${family}`;
-  while (px > 12 && ctx.measureText(text).width > maxWidth) {
-    px -= 2;
-    ctx.font = `${weight} ${px}px ${family}`;
+  var canvas = document.getElementById('cover');
+  var ctx = canvas.getContext('2d');
+
+  function loadImage(url) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = reject;
+      img.src = url;
+    });
   }
-  return px;
-}
 
-function drawLettering(ctx, W, H) {
-  const g = GRADES[state.grade];
-  const title = (state.title || 'Untitled').toUpperCase();
-  const subtitle = state.subtitle || '';
-  // Bottom scrim so the title reads over any photo.
-  const scrimH = H * 0.34;
-  const scrim = ctx.createLinearGradient(0, H - scrimH, 0, H);
-  scrim.addColorStop(0, 'rgba(10,4,24,0)');
-  scrim.addColorStop(1, 'rgba(10,4,24,0.62)');
-  ctx.fillStyle = scrim;
-  ctx.fillRect(0, H - scrimH, W, H);
-  // Top-left city tag.
-  const tag = 'SUNSET CITY';
-  const tagPx = Math.max(14, Math.round(W * 0.02));
-  ctx.font = `800 ${tagPx}px "Arial Black", Arial, sans-serif`;
-  ctx.textBaseline = 'alphabetic';
-  const tagX = W * 0.045;
-  const tagY = H * 0.055;
-  ctx.fillStyle = '#ffffff';
-  ctx.shadowColor = 'rgba(0,0,0,0.55)';
-  ctx.shadowBlur = W * 0.008;
-  ctx.shadowOffsetY = 2;
-  try { ctx.letterSpacing = `${tagPx * 0.22}px`; } catch { /* older canvas */ }
-  ctx.fillText(tag, tagX, tagY);
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-  ctx.fillStyle = g.glow;
-  ctx.fillRect(tagX, tagY + tagPx * 0.28, ctx.measureText(tag).width, Math.max(3, W * 0.004));
-  try { ctx.letterSpacing = '0px'; } catch { /* ignore */ }
-  // Title: bold poster lettering with outline + neon shadow.
-  const family = '"Arial Black", "Helvetica Neue", Arial, sans-serif';
-  const maxW = W * 0.91;
-  let titlePx = fitFont(ctx, title, maxW, W * 0.105 * state.titleScale, family, 900);
-  ctx.font = `900 ${titlePx}px ${family}`;
-  try { ctx.letterSpacing = `${titlePx * 0.015}px`; } catch { /* ignore */ }
-  const titleX = W * 0.045;
-  const titleY = H - H * 0.075 - (subtitle ? H * 0.052 : 0);
-  ctx.textBaseline = 'alphabetic';
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = '#160a28';
-  ctx.lineWidth = Math.max(4, titlePx * 0.085);
-  ctx.shadowColor = 'rgba(255,46,136,0.75)';
-  ctx.shadowBlur = W * 0.018;
-  ctx.shadowOffsetY = titlePx * 0.04;
-  ctx.strokeText(title, titleX, titleY);
-  const grad = ctx.createLinearGradient(0, titleY - titlePx, 0, titleY);
-  grad.addColorStop(0, '#ffffff');
-  grad.addColorStop(0.7, '#ffe9f4');
-  grad.addColorStop(1, g.glow);
-  ctx.fillStyle = grad;
-  ctx.fillText(title, titleX, titleY);
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-  try { ctx.letterSpacing = '0px'; } catch { /* ignore */ }
-  // Subtitle on a gradient pill.
-  if (subtitle) {
-    const subPx = Math.max(13, Math.round(W * 0.024));
-    ctx.font = `800 ${subPx}px "Arial Black", Arial, sans-serif`;
-    try { ctx.letterSpacing = `${subPx * 0.18}px`; } catch { /* ignore */ }
-    const tw = ctx.measureText(subtitle.toUpperCase()).width;
-    const padX = subPx * 0.9;
-    const pillW = Math.min(tw + padX * 2, W * 0.91);
-    const pillH = subPx * 2.1;
-    const pillX = W * 0.045;
-    const pillY = H - H * 0.055 - pillH + subPx * 0.55;
-    const pg = ctx.createLinearGradient(pillX, 0, pillX + pillW, 0);
-    pg.addColorStop(0, g.top);
-    pg.addColorStop(1, g.bottom);
-    ctx.fillStyle = pg;
-    ctx.beginPath();
-    ctx.roundRect(pillX, pillY, pillW, pillH, pillH / 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(subtitle.toUpperCase(), pillX + padX, pillY + pillH / 2 + subPx * 0.36);
-    try { ctx.letterSpacing = '0px'; } catch { /* ignore */ }
+  function panelImage(panel) {
+    if (panel.image) return panel.image;
+    return null;
   }
-}
 
-function renderCover(ctx, W, H) {
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, W, H);
-  const gut = Math.max(3, Math.round(W * 0.006));
-  const rects = panelRects();
-  rects.forEach((r, i) => {
-    const rx = r.x * W + (r.x > 0 ? gut : 0);
-    const ry = r.y * H + (r.y > 0 ? gut : 0);
-    const rw = r.w * W - (r.x > 0 ? gut : 0) - (r.x + r.w < 1 ? gut : 0);
-    const rh = r.h * H - (r.y > 0 ? gut : 0) - (r.y + r.h < 1 ? gut : 0);
-    const panel = state.panels[i];
-    const photo = state.photos[panel.photo];
-    if (photo) drawPhotoInto(ctx, photo.img, rx, ry, rw, rh, panel);
-    else drawPlaceholderPanel(ctx, rx, ry, rw, rh, i + 1);
-  });
-  applyGrade(ctx, W, H);
-  drawLettering(ctx, W, H);
-}
-
-function renderPreview() {
-  const [W, H] = SIZES[state.size];
-  const scale = Math.min(1, 880 / Math.max(W, H));
-  const pw = Math.round(W * scale);
-  const ph = Math.round(H * scale);
-  if (preview.width !== pw || preview.height !== ph) {
-    preview.width = pw;
-    preview.height = ph;
+  // Panel rectangles as fractions of the cover [x, y, w, h].
+  function layoutRects(layout) {
+    var g = 0.012; // gutter fraction
+    if (layout === 'grid') {
+      var hw = (1 - g) / 2, hh = (1 - g) / 2;
+      return [
+        [0, 0, hw, hh], [hw + g, 0, hw, hh],
+        [0, hh + g, hw, hh], [hw + g, hh + g, hw, hh]
+      ];
+    }
+    if (layout === 'strip') {
+      var cw = (1 - 2 * g) / 3;
+      return [
+        [0, 0, cw, 1], [cw + g, 0, cw, 1], [2 * (cw + g), 0, cw, 1]
+      ];
+    }
+    // hero: big left panel + two stacked on the right
+    var big = 0.64, side = 1 - big - g, half = (1 - g) / 2;
+    return [
+      [0, 0, big, 1],
+      [big + g, 0, side, half],
+      [big + g, half + g, side, half]
+    ];
   }
-  renderCover(pctx, pw, ph);
-  if (shotMode !== 'cover' && state.photos.length) {
-    // Selection outline on the preview only (never on export).
-    const rects = panelRects();
-    const r = rects[state.selectedPanel];
-    if (r) {
-      pctx.save();
-      pctx.strokeStyle = '#22d3ee';
-      pctx.lineWidth = 3;
-      pctx.setLineDash([10, 6]);
-      pctx.strokeRect(r.x * pw + 2, r.y * ph + 2, r.w * pw - 4, r.h * ph - 4);
-      pctx.restore();
+
+  function drawProcedural(ctx2, x, y, w, h, seed) {
+    // Fallback art if a photo has not loaded yet: layered sunset gradient
+    // with a procedural skyline silhouette. Fully deterministic.
+    var grad = ctx2.createLinearGradient(x, y, x, y + h);
+    grad.addColorStop(0, '#3d1157');
+    grad.addColorStop(0.55, '#c62b5e');
+    grad.addColorStop(1, '#ff8a3d');
+    ctx2.fillStyle = grad;
+    ctx2.fillRect(x, y, w, h);
+    ctx2.fillStyle = '#ffd23e';
+    ctx2.beginPath();
+    ctx2.arc(x + w * 0.72, y + h * 0.30, Math.min(w, h) * 0.16, 0, Math.PI * 2);
+    ctx2.fill();
+    // Skyline: deterministic pseudo-random heights from the seed.
+    var n = 9, bw = w / n, s = seed * 7919 + 13;
+    ctx2.fillStyle = '#1c0a2e';
+    for (var i = 0; i < n; i++) {
+      s = (s * 1103515245 + 12345) % 2147483648;
+      var bh = h * (0.22 + (s % 100) / 100 * 0.30);
+      ctx2.fillRect(x + i * bw + 1, y + h - bh, bw - 2, bh);
+    }
+    // Water shimmer lines.
+    ctx2.fillStyle = 'rgba(255, 210, 62, 0.5)';
+    for (var j = 0; j < 5; j++) {
+      ctx2.fillRect(x + w * 0.08, y + h * (0.78 + j * 0.045), w * (0.5 + j * 0.06), 2);
     }
   }
-  $('sizeLabel').textContent = `${W} × ${H}`;
-  $('emptyHint').style.display = state.photos.length ? 'none' : 'flex';
-}
 
-function refreshPanelControls() {
-  const rects = panelRects();
-  const seg = $('panelSeg');
-  seg.innerHTML = '';
-  rects.forEach((_, i) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'seg-btn' + (i === state.selectedPanel ? ' active' : '');
-    b.textContent = `Panel ${i + 1}`;
-    b.addEventListener('click', () => { state.selectedPanel = i; syncControls(); renderPreview(); });
-    seg.appendChild(b);
-  });
-  const sel = $('panelPhotoSelect');
-  sel.innerHTML = '';
-  state.photos.forEach((p, i) => {
-    const o = document.createElement('option');
-    o.value = String(i);
-    o.textContent = `${i + 1} · ${p.name}`;
-    sel.appendChild(o);
-  });
-  if (!state.photos.length) {
-    const o = document.createElement('option');
-    o.value = '';
-    o.textContent = 'No photo yet';
-    sel.appendChild(o);
+  function drawPhoto(ctx2, panel, x, y, w, h, seed) {
+    var img = panelImage(panel);
+    if (!img) { drawProcedural(ctx2, x, y, w, h, seed); return; }
+    var scale = Math.max(w / img.naturalWidth, h / img.naturalHeight) * panel.zoom;
+    var dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
+    var dx = x + (w - dw) / 2 + panel.dx * w * 0.3;
+    var dy = y + (h - dh) / 2 + panel.dy * h * 0.3;
+    ctx2.drawImage(img, dx, dy, dw, dh);
   }
-  sel.value = String(state.panels[state.selectedPanel].photo);
-  syncSliders();
-}
 
-function syncSliders() {
-  const p = state.panels[state.selectedPanel];
-  $('zoomRange').value = String(p.zoom);
-  $('offXRange').value = String(p.ox);
-  $('offYRange').value = String(p.oy);
-  $('zoomVal').textContent = `${p.zoom.toFixed(2)}×`;
-  $('offXVal').textContent = p.ox.toFixed(2);
-  $('offYVal').textContent = p.oy.toFixed(2);
-}
+  function drawCover(ctx2, W, H, st) {
+    var g = GRADES[st.grade];
+    var u = Math.min(W, H) / 900; // unit scale
 
-function syncControls() {
-  document.querySelectorAll('#layoutSeg .seg-btn').forEach((b) => {
-    b.classList.toggle('active', b.dataset.layout === state.layout);
-  });
-  document.querySelectorAll('#gradeSeg .seg-btn').forEach((b) => {
-    b.classList.toggle('active', b.dataset.grade === state.grade);
-  });
-  document.querySelectorAll('#sizeSeg .seg-btn').forEach((b) => {
-    b.classList.toggle('active', b.dataset.size === state.size);
-  });
-  if (state.selectedPanel >= panelRects().length) state.selectedPanel = 0;
-  refreshPanelControls();
-}
+    // Sky + sun + rays.
+    var sky = ctx2.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, g.skyTop);
+    sky.addColorStop(0.55, g.skyMid);
+    sky.addColorStop(1, g.skyLow);
+    ctx2.fillStyle = sky;
+    ctx2.fillRect(0, 0, W, H);
 
-function refreshTray() {
-  const tray = $('photoTray');
-  tray.innerHTML = '';
-  if (!state.photos.length) {
-    const s = document.createElement('span');
-    s.className = 'empty';
-    s.textContent = 'No photos yet — add one or try a sample.';
-    tray.appendChild(s);
-    return;
+    var sunX = W * 0.78, sunY = H * 0.20, sunR = Math.min(W, H) * 0.11;
+    var glow = ctx2.createRadialGradient(sunX, sunY, sunR * 0.2, sunX, sunY, sunR * 2.6);
+    glow.addColorStop(0, g.sunGlow);
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx2.fillStyle = glow;
+    ctx2.fillRect(0, 0, W, H);
+    ctx2.fillStyle = g.sun;
+    ctx2.beginPath();
+    ctx2.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+    ctx2.fill();
+
+    // Sun rays: 10 wedges fanning from the sun, deterministic angles.
+    ctx2.save();
+    ctx2.translate(sunX, sunY);
+    ctx2.fillStyle = g.ray;
+    for (var r = 0; r < 10; r++) {
+      var a = (r / 10) * Math.PI * 2 + 0.31;
+      ctx2.save();
+      ctx2.rotate(a);
+      ctx2.beginPath();
+      ctx2.moveTo(0, 0);
+      ctx2.lineTo(Math.max(W, H) * 1.2, -Math.max(W, H) * 0.05);
+      ctx2.lineTo(Math.max(W, H) * 1.2, Math.max(W, H) * 0.05);
+      ctx2.closePath();
+      ctx2.fill();
+      ctx2.restore();
+    }
+    ctx2.restore();
+
+    // Panels.
+    var rects = layoutRects(st.layout);
+    var gap = 0.012 * Math.min(W, H);
+    for (var i = 0; i < rects.length; i++) {
+      var rc = rects[i];
+      var px = rc[0] * W, py = rc[1] * H, pw = rc[2] * W, ph = rc[3] * H;
+      ctx2.save();
+      ctx2.beginPath();
+      ctx2.rect(px, py, pw, ph);
+      ctx2.clip();
+      drawPhoto(ctx2, st.panels[i], px, py, pw, ph, i + 1);
+      // Grade tint over the photo.
+      ctx2.fillStyle = g.overlay;
+      ctx2.fillRect(px, py, pw, ph);
+      ctx2.restore();
+      // White poster border + thin dark keyline.
+      ctx2.lineWidth = Math.max(2, 5 * u);
+      ctx2.strokeStyle = '#ffffff';
+      ctx2.strokeRect(px, py, pw, ph);
+      ctx2.lineWidth = Math.max(1, 1.5 * u);
+      ctx2.strokeStyle = 'rgba(20, 6, 32, 0.55)';
+      ctx2.strokeRect(px + 3 * u, py + 3 * u, pw - 6 * u, ph - 6 * u);
+    }
+
+    // Vignette.
+    var vg = ctx2.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.max(W, H) * 0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(10, 2, 20, 0.38)');
+    ctx2.fillStyle = vg;
+    ctx2.fillRect(0, 0, W, H);
+
+    // Caption banner.
+    var titlePx = st.titleSize * u;
+    var subPx = Math.max(14 * u, titlePx * 0.26);
+    var bannerH = titlePx * 1.55 + subPx * 1.5;
+    var by = st.captionPos === 'top' ? 0 : H - bannerH;
+    ctx2.fillStyle = g.banner;
+    ctx2.fillRect(0, by, W, bannerH);
+    ctx2.fillStyle = g.accent;
+    if (st.captionPos === 'top') ctx2.fillRect(0, bannerH, W, 5 * u);
+    else ctx2.fillRect(0, by - 5 * u, W, 5 * u);
+
+    var padX = 34 * u;
+    ctx2.save();
+    ctx2.translate(padX, by + titlePx * 1.02);
+    ctx2.transform(1, 0, -0.07, 1, 0, 0); // slight poster slant
+    ctx2.font = '900 ' + titlePx + 'px "Arial Black", Arial, sans-serif';
+    ctx2.textBaseline = 'alphabetic';
+    ctx2.lineJoin = 'round';
+    ctx2.lineWidth = Math.max(3, titlePx * 0.09);
+    ctx2.strokeStyle = '#14061f';
+    ctx2.strokeText(st.title.toUpperCase(), 0, 0);
+    ctx2.fillStyle = g.title;
+    ctx2.fillText(st.title.toUpperCase(), 0, 0);
+    ctx2.restore();
+
+    // Subtitle with manual letter spacing (works in every canvas).
+    ctx2.save();
+    ctx2.font = '700 ' + subPx + 'px Arial, sans-serif';
+    ctx2.fillStyle = g.accent;
+    ctx2.textBaseline = 'alphabetic';
+    var sub = st.subtitle.toUpperCase();
+    var sx = padX, sy = by + titlePx * 1.18 + subPx;
+    var spacing = subPx * 0.28;
+    for (var c = 0; c < sub.length; c++) {
+      ctx2.fillText(sub[c], sx, sy);
+      sx += ctx2.measureText(sub[c]).width + spacing;
+    }
+    ctx2.restore();
+
+    // Accent underline bar under the title.
+    ctx2.fillStyle = g.accent;
+    ctx2.fillRect(padX, by + titlePx * 1.12, Math.min(W * 0.30, 320 * u), 6 * u);
   }
-  state.photos.forEach((p, i) => {
-    const img = document.createElement('img');
-    img.src = p.url;
-    img.alt = p.name;
-    img.title = p.name;
-    img.className = i === state.pickedPhoto ? 'picked' : '';
-    img.addEventListener('click', () => {
-      state.pickedPhoto = i;
-      state.panels[state.selectedPanel].photo = i;
-      refreshTray();
-      refreshPanelControls();
-      renderPreview();
-    });
-    tray.appendChild(img);
-  });
-}
 
-function loadImageFile(file) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => resolve({ name: file.name, img, url });
-    img.onerror = () => reject(new Error(`Could not read ${file.name}`));
-    img.src = url;
-  });
-}
-
-function loadSample(name) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve({ name: `${name}.jpg (sample)`, img, url: SAMPLES[name] });
-    img.onerror = () => reject(new Error(`Could not load sample ${name}`));
-    img.src = SAMPLES[name];
-  });
-}
-
-async function addFiles(files) {
-  let added = 0;
-  for (const f of files) {
-    if (!f.type.startsWith('image/')) continue;
-    try {
-      const photo = await loadImageFile(f);
-      state.photos.push(photo);
-      added++;
-    } catch (e) { setStatus(e.message); }
+  function render() {
+    drawCover(ctx, canvas.width, canvas.height, state);
   }
-  afterPhotosChanged(added);
-}
 
-async function addSamples(names) {
-  let added = 0;
-  for (const n of names) {
-    if (!SAMPLES[n]) continue;
-    try {
-      const photo = await loadSample(n);
-      state.photos.push(photo);
-      added++;
-    } catch (e) { setStatus(e.message); }
+  function exportPNG(w, h) {
+    var off = document.createElement('canvas');
+    off.width = w; off.height = h;
+    var octx = off.getContext('2d');
+    drawCover(octx, w, h, state);
+    return off.toDataURL('image/png');
   }
-  afterPhotosChanged(added);
-}
 
-function afterPhotosChanged(added) {
-  if (added > 0) {
-    // First photo fills every panel; later photos fill the next empty panel.
-    state.panels.forEach((p, i) => {
-      if (state.photos.length === added && i < state.photos.length) p.photo = i % state.photos.length;
-      else if (p.photo >= state.photos.length) p.photo = state.photos.length - 1;
-    });
-    if (state.photos.length === added) state.panels.forEach((p, i) => { p.photo = i % state.photos.length; });
-    setStatus(`Loaded ${state.photos.length} photo${state.photos.length === 1 ? '' : 's'} — pick a layout, then Export PNG.`, true);
-  }
-  refreshTray();
-  refreshPanelControls();
-  renderPreview();
-}
-
-function setStatus(msg, ok) {
-  const el = $('statusLine');
-  el.textContent = msg;
-  el.classList.toggle('ok', !!ok);
-}
-
-function exportPNG() {
-  const [W, H] = SIZES[state.size];
-  const off = document.createElement('canvas');
-  off.width = W;
-  off.height = H;
-  renderCover(off.getContext('2d'), W, H);
-  off.toBlob((blob) => {
-    if (!blob) { setStatus('Export failed — canvas could not make a PNG.'); return; }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+  function downloadExport() {
+    var sel = document.getElementById('export-size').value.split('x');
+    var w = parseInt(sel[0], 10), h = parseInt(sel[1], 10);
+    var url = exportPNG(w, h);
+    var a = document.createElement('a');
     a.href = url;
-    a.download = `vice-cover-${state.size}.png`;
+    a.download = 'vice-cover-' + w + 'x' + h + '.png';
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    setStatus(`Exported ${W} × ${H} PNG (${(blob.size / 1024).toFixed(0)} KiB).`, true);
-  }, 'image/png');
-}
-
-function panelAtPoint(clientX, clientY) {
-  const rect = preview.getBoundingClientRect();
-  const x = (clientX - rect.left) / rect.width;
-  const y = (clientY - rect.top) / rect.height;
-  const rects = panelRects();
-  for (let i = rects.length - 1; i >= 0; i--) {
-    const r = rects[i];
-    if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return { index: i, fx: x, fy: y, rect: r };
+    return url;
   }
-  return null;
-}
 
-function bindEvents() {
-  $('addPhotosBtn').addEventListener('click', () => $('fileInput').click());
-  $('fileInput').addEventListener('change', (e) => { addFiles([...e.target.files]); e.target.value = ''; });
-  $('samplePierBtn').addEventListener('click', () => addSamples(['pier']));
-  $('sampleBlvdBtn').addEventListener('click', () => addSamples(['boulevard']));
-  $('exportBtn').addEventListener('click', exportPNG);
-  $('exportBtn2').addEventListener('click', exportPNG);
+  // ---- wiring ----
 
-  const dz = $('dropZone');
-  dz.addEventListener('click', (e) => { if (e.target === preview || e.target === dz) $('fileInput').click(); });
-  ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('dragging'); }));
-  ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('dragging'); }));
-  dz.addEventListener('drop', (e) => addFiles([...(e.dataTransfer?.files ?? [])]));
+  function segWire(id, attr, apply) {
+    var seg = document.getElementById(id);
+    seg.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('button');
+      if (!btn) return;
+      seg.querySelectorAll('button').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      apply(btn.getAttribute(attr));
+      syncPanelTabs();
+      render();
+    });
+  }
 
-  document.querySelectorAll('#layoutSeg .seg-btn').forEach((b) => {
-    b.addEventListener('click', () => { state.layout = b.dataset.layout; syncControls(); renderPreview(); });
+  segWire('layout-seg', 'data-layout', function (v) { state.layout = v; state.activePanel = 0; });
+  segWire('grade-seg', 'data-grade', function (v) { state.grade = v; });
+
+  function syncPanelTabs() {
+    var seg = document.getElementById('panel-seg');
+    var count = layoutRects(state.layout).length;
+    seg.innerHTML = '';
+    for (var i = 0; i < count; i++) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = 'Panel ' + (i + 1);
+      b.setAttribute('data-panel', String(i));
+      if (i === state.activePanel) b.classList.add('active');
+      seg.appendChild(b);
+    }
+    seg.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.activePanel = parseInt(b.getAttribute('data-panel'), 10);
+        syncPanelTabs();
+        syncPanelControls();
+      });
+    });
+  }
+
+  function syncPanelControls() {
+    var p = state.panels[state.activePanel];
+    document.getElementById('zoom').value = Math.round(p.zoom * 100);
+    document.getElementById('shift-x').value = Math.round(p.dx * 100);
+    document.getElementById('shift-y').value = Math.round(p.dy * 100);
+  }
+
+  function setPanelPhoto(panel, file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      loadImage(reader.result).then(function (img) {
+        panel.image = img;
+        panel.uploadUrl = reader.result;
+        panel.sample = 'upload';
+        render();
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function useSample(name) {
+    var p = state.panels[state.activePanel];
+    p.sample = name;
+    p.uploadUrl = null;
+    loadImage(SAMPLES[name]).then(function (img) {
+      p.image = img;
+      render();
+    });
+  }
+
+  document.getElementById('sample-a').addEventListener('click', function () { useSample('boulevard'); });
+  document.getElementById('sample-b').addEventListener('click', function () { useSample('pier'); });
+  document.getElementById('panel-file').addEventListener('change', function (ev) {
+    if (ev.target.files && ev.target.files[0]) setPanelPhoto(state.panels[state.activePanel], ev.target.files[0]);
+    ev.target.value = '';
   });
-  document.querySelectorAll('#gradeSeg .seg-btn').forEach((b) => {
-    b.addEventListener('click', () => { state.grade = b.dataset.grade; syncControls(); renderPreview(); });
-  });
-  document.querySelectorAll('#sizeSeg .seg-btn').forEach((b) => {
-    b.addEventListener('click', () => { state.size = b.dataset.size; syncControls(); renderPreview(); });
-  });
-  $('panelPhotoSelect').addEventListener('change', (e) => {
-    state.panels[state.selectedPanel].photo = Number(e.target.value) || 0;
-    renderPreview();
-  });
-  $('zoomRange').addEventListener('input', (e) => { state.panels[state.selectedPanel].zoom = Number(e.target.value); syncSliders(); renderPreview(); });
-  $('offXRange').addEventListener('input', (e) => { state.panels[state.selectedPanel].ox = Number(e.target.value); syncSliders(); renderPreview(); });
-  $('offYRange').addEventListener('input', (e) => { state.panels[state.selectedPanel].oy = Number(e.target.value); syncSliders(); renderPreview(); });
-  $('fillAllBtn').addEventListener('click', () => {
-    const idx = state.panels[state.selectedPanel].photo;
-    state.panels.forEach((p) => { p.photo = idx; });
-    refreshPanelControls();
-    renderPreview();
-    setStatus('Same photo in every panel.', true);
-  });
-  $('resetCropBtn').addEventListener('click', () => {
-    const p = state.panels[state.selectedPanel];
-    p.zoom = 1; p.ox = 0; p.oy = 0;
-    syncSliders(); renderPreview();
-  });
-  $('titleInput').addEventListener('input', (e) => { state.title = e.target.value; renderPreview(); });
-  $('subtitleInput').addEventListener('input', (e) => { state.subtitle = e.target.value; renderPreview(); });
-  $('titleSizeRange').addEventListener('input', (e) => {
-    state.titleScale = Number(e.target.value) / 100;
-    $('titleSizeVal').textContent = `${e.target.value}%`;
-    renderPreview();
+  document.getElementById('upload-all').addEventListener('change', function (ev) {
+    var files = Array.prototype.slice.call(ev.target.files || []);
+    files.slice(0, 4).forEach(function (f, i) { setPanelPhoto(state.panels[i], f); });
+    ev.target.value = '';
   });
 
-  // Drag to pan, wheel to zoom, click to select — on the preview canvas.
-  let drag = null;
-  preview.addEventListener('pointerdown', (e) => {
-    const hit = panelAtPoint(e.clientX, e.clientY);
-    if (!hit) return;
-    state.selectedPanel = hit.index;
-    syncControls();
-    drag = { x: e.clientX, y: e.clientY, panel: state.panels[hit.index], rect: hit.rect };
-    preview.setPointerCapture(e.pointerId);
-    renderPreview();
+  document.getElementById('zoom').addEventListener('input', function (ev) {
+    state.panels[state.activePanel].zoom = parseInt(ev.target.value, 10) / 100;
+    render();
   });
-  preview.addEventListener('pointermove', (e) => {
+  document.getElementById('shift-x').addEventListener('input', function (ev) {
+    state.panels[state.activePanel].dx = parseInt(ev.target.value, 10) / 100;
+    render();
+  });
+  document.getElementById('shift-y').addEventListener('input', function (ev) {
+    state.panels[state.activePanel].dy = parseInt(ev.target.value, 10) / 100;
+    render();
+  });
+  document.getElementById('reset-panel').addEventListener('click', function () {
+    var p = state.panels[state.activePanel];
+    p.zoom = 1.2; p.dx = 0; p.dy = 0;
+    syncPanelControls();
+    render();
+  });
+
+  document.getElementById('title-input').addEventListener('input', function (ev) {
+    state.title = ev.target.value || 'UNTITLED';
+    render();
+  });
+  document.getElementById('subtitle-input').addEventListener('input', function (ev) {
+    state.subtitle = ev.target.value || '';
+    render();
+  });
+  document.getElementById('title-size').addEventListener('input', function (ev) {
+    state.titleSize = parseInt(ev.target.value, 10);
+    render();
+  });
+  document.getElementById('caption-pos').addEventListener('change', function (ev) {
+    state.captionPos = ev.target.value;
+    render();
+  });
+
+  document.getElementById('export-btn').addEventListener('click', downloadExport);
+  document.getElementById('export-btn-2').addEventListener('click', downloadExport);
+
+  // Drag a panel photo to reposition it.
+  var drag = null;
+  function panelAt(clientX, clientY) {
+    var r = canvas.getBoundingClientRect();
+    var fx = (clientX - r.left) / r.width, fy = (clientY - r.top) / r.height;
+    var rects = layoutRects(state.layout);
+    for (var i = 0; i < rects.length; i++) {
+      var rc = rects[i];
+      if (fx >= rc[0] && fx <= rc[0] + rc[2] && fy >= rc[1] && fy <= rc[1] + rc[3]) return i;
+    }
+    return -1;
+  }
+  canvas.addEventListener('pointerdown', function (ev) {
+    var i = panelAt(ev.clientX, ev.clientY);
+    if (i < 0) return;
+    state.activePanel = i;
+    syncPanelTabs();
+    syncPanelControls();
+    drag = { i: i, x: ev.clientX, y: ev.clientY, dx: state.panels[i].dx, dy: state.panels[i].dy };
+    canvas.setPointerCapture(ev.pointerId);
+  });
+  canvas.addEventListener('pointermove', function (ev) {
     if (!drag) return;
-    const rect = preview.getBoundingClientRect();
-    const dxFrac = (e.clientX - drag.x) / rect.width / drag.rect.w;
-    const dyFrac = (e.clientY - drag.y) / rect.height / drag.rect.h;
-    drag.panel.ox = Math.max(-0.5, Math.min(0.5, drag.panel.ox + dxFrac));
-    drag.panel.oy = Math.max(-0.5, Math.min(0.5, drag.panel.oy + dyFrac));
-    drag.x = e.clientX;
-    drag.y = e.clientY;
-    syncSliders();
-    renderPreview();
+    var r = canvas.getBoundingClientRect();
+    var p = state.panels[drag.i];
+    p.dx = Math.max(-1, Math.min(1, drag.dx + (ev.clientX - drag.x) / r.width / 0.3));
+    p.dy = Math.max(-1, Math.min(1, drag.dy + (ev.clientY - drag.y) / r.height / 0.3));
+    syncPanelControls();
+    render();
   });
-  preview.addEventListener('pointerup', () => { drag = null; });
-  preview.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const hit = panelAtPoint(e.clientX, e.clientY);
-    if (!hit) return;
-    state.selectedPanel = hit.index;
-    const p = state.panels[hit.index];
-    p.zoom = Math.max(1, Math.min(3, p.zoom * (e.deltaY < 0 ? 1.08 : 0.93)));
-    syncControls();
-    renderPreview();
-  }, { passive: false });
-}
+  canvas.addEventListener('pointerup', function () { drag = null; });
 
-async function initFromQuery() {
-  const caption = params.get('caption');
-  if (caption) { state.title = caption; $('titleInput').value = caption; }
-  const subtitle = params.get('subtitle');
-  if (subtitle) { state.subtitle = subtitle; $('subtitleInput').value = subtitle; }
-  if (LAYOUTS[params.get('layout')]) state.layout = params.get('layout');
-  if (GRADES[params.get('grade')]) state.grade = params.get('grade');
-  if (SIZES[params.get('size')]) state.size = params.get('size');
-  const ts = params.get('titlesize');
-  if (ts && Number(ts) >= 60 && Number(ts) <= 140) {
-    state.titleScale = Number(ts) / 100;
-    $('titleSizeRange').value = ts;
-    $('titleSizeVal').textContent = `${ts}%`;
-  }
-  const photoParam = params.get('photo');
-  if (photoParam) {
-    await addSamples(photoParam.split(',').map((s) => s.trim()).filter(Boolean));
-  }
-  // Params changed the state after the first syncControls() at boot, so
-  // re-sync the buttons/sliders to match what is actually rendered.
-  syncControls();
-  if (shotMode === 'cover') {
-    document.body.classList.add('shot-cover');
-    // Cover shot: canvas fills the viewport at the export aspect.
-    const [W, H] = SIZES[state.size];
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const scale = Math.min(vw / W, vh / H);
-    preview.width = Math.round(W * scale);
-    preview.height = Math.round(H * scale);
-    renderCover(pctx, preview.width, preview.height);
-  } else {
-    renderPreview();
-  }
-  window.__vice = { ready: true };
-}
+  // Preload the bundled samples, then draw.
+  Promise.all([
+    loadImage(SAMPLES.boulevard),
+    loadImage(SAMPLES.pier)
+  ]).then(function (imgs) {
+    state.panels[0].image = imgs[0];
+    state.panels[1].image = imgs[1];
+    state.panels[2].image = imgs[0];
+    state.panels[3].image = imgs[1];
+    render();
+  }).catch(function () { render(); });
 
-bindEvents();
-syncControls();
-refreshTray();
-initFromQuery();
+  syncPanelTabs();
+  syncPanelControls();
+  render();
+
+  // Test hook used by the maker's own verification scripts.
+  window.__vcs = { state: state, render: render, exportPNG: exportPNG, drawCover: drawCover };
+})();
