@@ -3,87 +3,97 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Leonida Nights — Cover Maker</title>
+<title>Leonida Nights — GTA 6 Style Cover Maker</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="app">
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-mark">LN</span>
-      <div>
-        <h1>Leonida Nights</h1>
-        <p>Cover Maker &middot; turn your photo into a Vice City poster</p>
-      </div>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">LN</span>
+    <div>
+      <h1>Leonida Nights</h1>
+      <p>Turn your photos into GTA 6 poster-style cover art</p>
     </div>
-    <div class="top-actions">
-      <label class="btn file-btn">Add photos
-        <input id="fileInput" type="file" accept="image/*" multiple hidden>
-      </label>
-      <button id="exportBtn" class="btn primary">Export PNG</button>
-    </div>
-  </header>
+  </div>
+  <div class="top-actions">
+    <button id="loadSamplesBtn" type="button">Load sample photos</button>
+    <label class="upload-btn" for="fileInput">Add your photos</label>
+    <input id="fileInput" type="file" accept="image/*" multiple hidden>
+  </div>
+</header>
 
-  <main class="layout">
-    <section class="stage-col">
-      <div id="dropZone" class="dropzone">
-        <canvas id="cover" width="1080" height="1080"></canvas>
-        <p class="drop-hint">Drop photos here, or use &ldquo;Add photos&rdquo; — click a panel to select it, drag to move its photo.</p>
+<main id="editorView" class="layout">
+  <section class="stage-col">
+    <div id="dropZone" class="drop-zone">
+      <canvas id="coverCanvas" width="1080" height="1080"></canvas>
+      <p class="drop-hint">Drop photos here, or use “Add your photos”</p>
+    </div>
+    <div class="photo-strip" id="photoStrip" aria-label="Your photos"></div>
+  </section>
+
+  <aside class="panel-col">
+    <section class="card">
+      <h2>1 · Pick a panel</h2>
+      <p class="hint">Click a panel on the cover, then choose a photo for it. One photo can fill several panels.</p>
+      <div class="panel-buttons" id="panelButtons" role="group" aria-label="Panels">
+        <button type="button" data-panel="hero" class="panel-btn active">Hero</button>
+        <button type="button" data-panel="side1" class="panel-btn">Side 1</button>
+        <button type="button" data-panel="side2" class="panel-btn">Side 2</button>
+        <button type="button" data-panel="strip" class="panel-btn">Strip</button>
       </div>
-      <div id="tray" class="tray" aria-label="Your photos"></div>
+      <label class="field">Photo for this panel
+        <select id="photoPicker"></select>
+      </label>
+      <label class="field">Zoom
+        <input id="zoomSlider" type="range" min="1" max="3" step="0.01" value="1">
+      </label>
+      <p class="hint">Drag the photo inside its panel to move it. Scroll over the cover to zoom.</p>
     </section>
 
-    <aside class="panel-col">
-      <section class="card">
-        <h2>Caption</h2>
-        <label>Title
-          <input id="titleInput" type="text" value="LEONIDA NIGHTS" maxlength="40">
-        </label>
-        <label>Subtitle
-          <input id="subInput" type="text" value="A Vice City story in four frames" maxlength="70">
-        </label>
-        <fieldset>
-          <legend>Title style</legend>
-          <label class="radio"><input type="radio" name="titleStyle" value="outline" checked> Outline</label>
-          <label class="radio"><input type="radio" name="titleStyle" value="gradient"> Gradient</label>
-          <label class="radio"><input type="radio" name="titleStyle" value="glow"> Glow</label>
-        </fieldset>
-      </section>
-
-      <section class="card">
-        <h2>Colour grade</h2>
-        <div id="grades" class="grades">
-          <button data-grade="sunset" class="grade-btn active">Sunset</button>
-          <button data-grade="neon" class="grade-btn">Neon Night</button>
-          <button data-grade="noir" class="grade-btn">Palm Noir</button>
-          <button data-grade="pastel" class="grade-btn">Vice Pastel</button>
+    <section class="card">
+      <h2>2 · Caption</h2>
+      <label class="field">Title
+        <input id="titleInput" type="text" value="LEONIDA NIGHTS" maxlength="28">
+      </label>
+      <label class="field">Subtitle
+        <input id="subtitleInput" type="text" value="VICE CITY · SUMMER 2026" maxlength="48">
+      </label>
+      <div class="field">Title style
+        <div class="chip-row" id="titleStyleRow" role="group" aria-label="Title style">
+          <button type="button" data-style="outline" class="chip active">Outline</button>
+          <button type="button" data-style="gradient" class="chip">Gradient</button>
+          <button type="button" data-style="glow" class="chip">Glow</button>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <section class="card">
-        <h2>Panels <span id="selName" class="sel-name"></span></h2>
-        <div id="panelEditors"></div>
-        <p class="note">Pick a panel above, then choose its photo and zoom. Drag on the
-        cover to move the selected photo; scroll over it to zoom.</p>
-      </section>
+    <section class="card">
+      <h2>3 · Colour grade</h2>
+      <div class="chip-row" id="gradeRow" role="group" aria-label="Colour grade">
+        <button type="button" data-grade="sunset" class="chip active">Sunset</button>
+        <button type="button" data-grade="neon" class="chip">Neon Night</button>
+        <button type="button" data-grade="noir" class="chip">Palm Noir</button>
+        <button type="button" data-grade="pastel" class="chip">Vice Pastel</button>
+      </div>
+    </section>
 
-      <section class="card">
-        <h2>Export size</h2>
-        <div class="sizes">
-          <label class="radio"><input type="radio" name="exsize" value="1080x1080" checked> 1080 &times; 1080 (square)</label>
-          <label class="radio"><input type="radio" name="exsize" value="1080x1350"> 1080 &times; 1350 (portrait)</label>
-          <label class="radio"><input type="radio" name="exsize" value="1920x1080"> 1920 &times; 1080 (wide)</label>
-        </div>
-        <p id="status" class="status" aria-live="polite"></p>
-      </section>
-    </aside>
-  </main>
+    <section class="card export-card">
+      <h2>4 · Export PNG</h2>
+      <div class="chip-row" id="sizeRow" role="group" aria-label="Export size">
+        <button type="button" data-size="1080x1080" class="chip active">1080 × 1080</button>
+        <button type="button" data-size="1080x1350" class="chip">1080 × 1350</button>
+        <button type="button" data-size="1920x1080" class="chip">1920 × 1080</button>
+      </div>
+      <button id="exportBtn" type="button" class="export-btn">Download PNG</button>
+      <p class="hint">Everything runs in your browser. Your photos never leave your machine.</p>
+    </section>
+  </aside>
+</main>
 
-  <footer class="foot">
-    <p>Leonida Nights Cover Maker — an original fan-style poster tool. No Rockstar
-    Games logo, artwork or font is used. Photos stay on your machine; nothing is uploaded.</p>
-  </footer>
-</div>
+<main id="coverView" class="cover-view" hidden>
+  <canvas id="coverOnlyCanvas"></canvas>
+</main>
+
 <script src="app.js"></script>
 </body>
 </html>

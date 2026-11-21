@@ -1,72 +1,281 @@
-/* Leonida Nights Cover Maker — one canvas renders the whole poster, and the
-   same render function powers the live preview and the PNG export. Photos are
-   read on the user's own machine and never uploaded anywhere. */
-"use strict";
+/* Leonida Nights Cover Maker — one render function drives the live
+ * preview and the PNG export. Photos stay on the user's machine:
+ * nothing is uploaded anywhere. No Rockstar logo, artwork or font
+ * is used; the lettering is Liberation Sans under the OFL. */
+'use strict';
 
-const $ = (sel) => document.querySelector(sel);
-const canvas = $("#cover");
-const ctx = canvas.getContext("2d");
+const $ = (id) => document.getElementById(id);
 
-const PANELS = [
-  { id: "hero", name: "Hero", rect: [0, 0, 0.58, 0.62] },
-  { id: "sideTop", name: "Side top", rect: [0.58, 0, 0.42, 0.31] },
-  { id: "sideBottom", name: "Side bottom", rect: [0.58, 0.31, 0.42, 0.31] },
-  { id: "strip", name: "Bottom strip", rect: [0, 0.62, 1.0, 0.38] },
+const SAMPLES = [
+  { name: 'Sunset skyline', src: 'samples/sunset-skyline.jpg' },
+  { name: 'Palms beach', src: 'samples/palms-beach.jpg' },
+  { name: 'Neon street', src: 'samples/neon-street.jpg' },
 ];
-const CAPTION_FRAC = 0.16; // caption band height, as a fraction of cover height
 
 const GRADES = {
   sunset: {
-    label: "Sunset",
-    tint: ["rgba(124, 58, 237, 0.28)", "rgba(255, 46, 136, 0.20)", "rgba(255, 150, 50, 0.30)"],
-    band: ["#2a0a4d", "#7b1e6e", "#c2275f"],
-    sun: ["#ffe9a3", "#ff9a3d"],
-    title: "#fff3d6",
+    label: 'Sunset',
+    sky: ['#2e1056', '#7a2070', '#e2486e', '#ff8c42', '#ffc45c'],
+    overlay: ['rgba(90,20,120,0.55)', 'rgba(226,72,110,0.35)', 'rgba(255,140,66,0.45)', 'rgba(255,196,92,0.4)'],
+    mode: 'soft-light',
+    tint: 'rgba(255,120,60,0.10)',
   },
   neon: {
-    label: "Neon Night",
-    tint: ["rgba(34, 211, 238, 0.22)", "rgba(168, 85, 247, 0.26)", "rgba(255, 46, 136, 0.24)"],
-    band: ["#05081f", "#1b1046", "#3d1160"],
-    sun: ["#a5f3fc", "#e879f9"],
-    title: "#e0f7ff",
+    label: 'Neon Night',
+    sky: ['#070418', '#1c0a4e', '#3d1478', '#a4138c', '#ff2d95'],
+    overlay: ['rgba(20,10,80,0.6)', 'rgba(164,19,140,0.4)', 'rgba(0,229,255,0.35)', 'rgba(255,45,149,0.35)'],
+    mode: 'overlay',
+    tint: 'rgba(0,229,255,0.08)',
   },
   noir: {
-    label: "Palm Noir",
-    tint: ["rgba(10, 10, 26, 0.42)", "rgba(60, 20, 90, 0.30)", "rgba(255, 122, 61, 0.16)"],
-    band: ["#0a0616", "#1c0b33", "#3a1445"],
-    sun: ["#ffd9a0", "#ff7a3d"],
-    title: "#ffe9c4",
+    label: 'Palm Noir',
+    sky: ['#0a0a12', '#17141f', '#2c2438', '#4a3a52', '#8a6a4a'],
+    overlay: ['rgba(0,0,0,0.5)', 'rgba(30,20,40,0.35)', 'rgba(255,210,61,0.22)', 'rgba(255,210,61,0.18)'],
+    mode: 'soft-light',
+    tint: 'rgba(0,0,0,0.12)',
   },
   pastel: {
-    label: "Vice Pastel",
-    tint: ["rgba(255, 183, 213, 0.24)", "rgba(167, 139, 250, 0.20)", "rgba(253, 224, 130, 0.22)"],
-    band: ["#5b3a8e", "#c96aa0", "#f2a65e"],
-    sun: ["#fff6d8", "#ffb46b"],
-    title: "#fffaf0",
+    label: 'Vice Pastel',
+    sky: ['#5b4a8a', '#a06bb0', '#f28bb8', '#ffb3a0', '#ffe3b3'],
+    overlay: ['rgba(150,90,190,0.35)', 'rgba(242,139,184,0.3)', 'rgba(255,179,160,0.3)', 'rgba(255,227,179,0.28)'],
+    mode: 'soft-light',
+    tint: 'rgba(255,255,255,0.06)',
   },
 };
 
-const state = {
-  photos: [], // {id, name, img, url}
-  panels: PANELS.map((p) => ({ id: p.id, photoId: null, zoom: 1, ox: 0, oy: 0 })),
-  selected: "hero",
-  title: "LEONIDA NIGHTS",
-  subtitle: "A Vice City story in four frames",
-  grade: "sunset",
-  titleStyle: "outline",
-  exportSize: "1080x1080",
+const SIZES = {
+  '1080x1080': [1080, 1080],
+  '1080x1350': [1080, 1350],
+  '1920x1080': [1920, 1080],
 };
 
-let photoSeq = 0;
+/* ---------------------------------------------------------------- state */
+const state = {
+  photos: [],               // {name, img, url}
+  panels: {
+    hero:  { photo: 0, zoom: 1.15, ox: 0, oy: 0 },
+    side1: { photo: 1, zoom: 1.1, ox: 0, oy: 0 },
+    side2: { photo: 2, zoom: 1.1, ox: 0, oy: 0 },
+    strip: { photo: 0, zoom: 1.3, ox: 0, oy: -0.08 },
+  },
+  selectedPanel: 'hero',
+  title: 'LEONIDA NIGHTS',
+  subtitle: 'VICE CITY · SUMMER 2026',
+  grade: 'sunset',
+  titleStyle: 'outline',
+  size: '1080x1080',
+};
 
-function addPhoto(img, name, url) {
-  const photo = { id: "p" + ++photoSeq, name, img, url: url || img.src };
-  state.photos.push(photo);
-  buildTray();
-  buildPanelEditors();
-  return photo;
+/* ------------------------------------------------------------- layout */
+/* Panels as fractions of the canvas: hero + 2 side panels + bottom
+ * strip, with a full-width sunset caption band across the bottom. */
+function layoutFor(W, H) {
+  const panel = (x, y, w, h) => ({ x: x * W, y: y * H, w: w * W, h: h * H });
+  return {
+    hero: panel(0.04, 0.04, 0.59, 0.56),
+    side1: panel(0.65, 0.04, 0.31, 0.27),
+    side2: panel(0.65, 0.33, 0.31, 0.27),
+    strip: panel(0.04, 0.62, 0.92, 0.16),
+    caption: { x: 0, y: 0.80 * H, w: W, h: 0.20 * H },
+  };
 }
 
+/* ------------------------------------------------------------- drawing */
+function drawPhotoInPanel(ctx, photo, rect, panel) {
+  if (!photo || !photo.img || !photo.img.naturalWidth) {
+    ctx.fillStyle = '#241338';
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.fillStyle = '#8a76a8';
+    ctx.font = `700 ${Math.round(rect.h * 0.09)}px "Leonida Sans", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ADD A PHOTO', rect.x + rect.w / 2, rect.y + rect.h / 2);
+    return;
+  }
+  const img = photo.img;
+  const base = Math.max(rect.w / img.naturalWidth, rect.h / img.naturalHeight);
+  const scale = base * panel.zoom;
+  const dw = img.naturalWidth * scale;
+  const dh = img.naturalHeight * scale;
+  const dx = rect.x + (rect.w - dw) / 2 + panel.ox * rect.w;
+  const dy = rect.y + (rect.h - dh) / 2 + panel.oy * rect.h;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rect.x, rect.y, rect.w, rect.h);
+  ctx.clip();
+  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
+}
+
+function drawPalm(ctx, x, y, s, color, lean) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineCap = 'round';
+  const topX = x + lean * s;
+  const topY = y - 1.1 * s;
+  ctx.lineWidth = Math.max(3, s * 0.045);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.quadraticCurveTo(x + lean * s * 0.4, y - s * 0.6, topX, topY);
+  ctx.stroke();
+  for (let k = 0; k < 7; k++) {
+    const a = Math.PI * (0.12 + 0.12 * k);
+    const dx = Math.cos(a) * (k < 3 ? -1 : 1) * (0.55 + 0.4 * Math.abs(k - 3) / 3);
+    const dy = -Math.sin(a) * 0.5 - 0.12;
+    const ex = topX + dx * s;
+    const ey = topY + dy * s + s * 0.22;
+    const mx = topX + dx * s * 0.45;
+    const my = topY + dy * s * 0.3 - s * 0.14;
+    ctx.lineWidth = Math.max(2, s * 0.035);
+    ctx.beginPath();
+    ctx.moveTo(topX, topY);
+    ctx.quadraticCurveTo(mx, my, ex, ey);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(topX, topY, s * 0.06, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawHalftone(ctx, band, colors) {
+  const rows = 7;
+  for (let r = 0; r < rows; r++) {
+    const y = band.y + band.h * (0.12 + (r / rows) * 0.8);
+    const maxR = band.h * 0.055 * (1 - r / rows) + 1;
+    const step = maxR * 3.4;
+    for (let x = band.x + step / 2; x < band.x + band.w; x += step) {
+      ctx.fillStyle = colors[r % colors.length];
+      ctx.globalAlpha = 0.28 + 0.4 * (r / rows);
+      ctx.beginPath();
+      ctx.arc(x, y, maxR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawCaption(ctx, W, H, band, grade, title, subtitle, style) {
+  const g = ctx.createLinearGradient(0, band.y, 0, band.y + band.h);
+  grade.sky.forEach((c, i) => g.addColorStop(i / (grade.sky.length - 1), c));
+  ctx.fillStyle = g;
+  ctx.fillRect(band.x, band.y, band.w, band.h);
+
+  // Sunset glow line where the band meets the panels.
+  const glow = ctx.createLinearGradient(0, band.y - 2, 0, band.y + band.h * 0.3);
+  glow.addColorStop(0, 'rgba(255,196,92,0.9)');
+  glow.addColorStop(1, 'rgba(255,196,92,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(band.x, band.y, band.w, band.h * 0.3);
+
+  drawHalftone(ctx, { x: band.x, y: band.y + band.h * 0.55, w: band.w, h: band.h * 0.45 },
+    ['#ffd23d', '#ff5e8a', '#ff8c42']);
+
+  // Palm silhouettes rising from the band's top edge.
+  const palmColor = 'rgba(24,8,44,0.9)';
+  drawPalm(ctx, W * 0.06, band.y + 4, H * 0.075, palmColor, 0.14);
+  drawPalm(ctx, W * 0.94, band.y + 4, H * 0.085, palmColor, -0.12);
+  drawPalm(ctx, W * 0.885, band.y + 4, H * 0.05, palmColor, -0.2);
+
+  // Title.
+  const titleSize = Math.min(W * 0.085, band.h * 0.46);
+  ctx.font = `700 ${titleSize}px "Leonida Sans", "Liberation Sans", Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  try { ctx.letterSpacing = `${Math.round(titleSize * 0.06)}px`; } catch (e) { /* older canvas */ }
+  const tx = W / 2;
+  const ty = band.y + band.h * 0.38;
+  ctx.save();
+  if (style === 'gradient') {
+    const tg = ctx.createLinearGradient(0, ty - titleSize * 0.6, 0, ty + titleSize * 0.6);
+    tg.addColorStop(0, '#fff6d8');
+    tg.addColorStop(0.45, '#ffd23d');
+    tg.addColorStop(0.75, '#ff5e8a');
+    tg.addColorStop(1, '#c86bff');
+    ctx.fillStyle = tg;
+    ctx.lineWidth = titleSize * 0.09;
+    ctx.strokeStyle = '#1c0b2e';
+    ctx.strokeText(title, tx, ty);
+    ctx.fillText(title, tx, ty);
+  } else if (style === 'glow') {
+    ctx.shadowColor = '#ff2d95';
+    ctx.shadowBlur = titleSize * 0.55;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(title, tx, ty);
+    ctx.shadowBlur = titleSize * 0.2;
+    ctx.shadowColor = '#19d3da';
+    ctx.fillText(title, tx, ty);
+  } else { // outline
+    ctx.lineWidth = titleSize * 0.1;
+    ctx.strokeStyle = '#1c0b2e';
+    ctx.lineJoin = 'round';
+    ctx.strokeText(title, tx, ty);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(title, tx, ty);
+    ctx.lineWidth = titleSize * 0.025;
+    ctx.strokeStyle = '#ffd23d';
+    ctx.strokeText(title, tx, ty);
+  }
+  ctx.restore();
+
+  // Subtitle.
+  const subSize = Math.max(14, titleSize * 0.24);
+  ctx.font = `700 ${subSize}px "Leonida Sans", "Liberation Sans", Arial, sans-serif`;
+  try { ctx.letterSpacing = `${Math.round(subSize * 0.35)}px`; } catch (e) { /* older canvas */ }
+  ctx.fillStyle = '#ffe9a8';
+  ctx.fillText(subtitle, tx, band.y + band.h * 0.78);
+  try { ctx.letterSpacing = '0px'; } catch (e) { /* older canvas */ }
+}
+
+/* The one render function: preview and export share it. */
+function renderCover(ctx, W, H, s) {
+  const grade = GRADES[s.grade] || GRADES.sunset;
+  const lay = layoutFor(W, H);
+
+  // Deep violet base + teal-shadowed frame.
+  ctx.fillStyle = '#150a24';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#0d4b52';
+  ctx.fillRect(0, 0, W, H * 0.02);
+
+  for (const key of ['hero', 'side1', 'side2', 'strip']) {
+    const rect = lay[key];
+    const panel = s.panels[key];
+    drawPhotoInPanel(ctx, s.photos[panel.photo], rect, panel);
+  }
+
+  // Grade wash over the photos.
+  ctx.save();
+  ctx.globalCompositeOperation = grade.mode;
+  const og = ctx.createLinearGradient(0, 0, W, H);
+  grade.overlay.forEach((c, i) => og.addColorStop(i / (grade.overlay.length - 1), c));
+  ctx.fillStyle = og;
+  ctx.fillRect(0, 0, W, H * 0.82);
+  ctx.restore();
+  ctx.fillStyle = grade.tint;
+  ctx.fillRect(0, 0, W, H * 0.82);
+
+  // Vignette.
+  const vg = ctx.createRadialGradient(W / 2, H * 0.4, Math.min(W, H) * 0.35,
+    W / 2, H * 0.45, Math.max(W, H) * 0.75);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(10,4,24,0.45)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+
+  // White poster borders between panels.
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = Math.max(4, W * 0.006);
+  for (const key of ['hero', 'side1', 'side2', 'strip']) {
+    const r = lay[key];
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+  }
+
+  drawCaption(ctx, W, H, lay.caption, grade, s.title, s.subtitle, s.titleStyle);
+}
+
+/* -------------------------------------------------------------- photos */
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -77,474 +286,254 @@ function loadImage(src) {
 }
 
 async function loadSamples() {
-  const defs = [
-    ["samples/boulevard.jpg", "Boulevard sunset"],
-    ["samples/pier.jpg", "Pier sunset"],
-    ["samples/palms.jpg", "Palm dusk"],
-  ];
-  const loaded = [];
-  for (const [src, name] of defs) {
+  for (const sample of SAMPLES) {
+    if (state.photos.some((p) => p.src === sample.src)) continue;
     try {
-      loaded.push(addPhoto(await loadImage(src), name, src));
-    } catch (e) {
-      console.warn("sample failed to load:", src);
-    }
+      const img = await loadImage(sample.src);
+      state.photos.push({ name: sample.name, img, src: sample.src });
+    } catch (e) { /* sample missing: editor still works with uploads */ }
   }
-  if (loaded.length >= 3) {
-    state.panels[0].photoId = loaded[0].id; // hero
-    state.panels[1].photoId = loaded[1].id; // side top
-    state.panels[2].photoId = loaded[2].id; // side bottom
-    state.panels[3].photoId = loaded[0].id; // strip, same photo, different crop
-    state.panels[3].zoom = 1.5;
-    state.panels[3].oy = -60;
-    // Assignments happened after the per-photo UI rebuilds, so rebuild once
-    // more so the panel photo pickers show the loaded photos.
-    buildTray();
-    buildPanelEditors();
+  refreshPhotoUI();
+  renderPreview();
+}
+
+function addFiles(files) {
+  const list = [...files].filter((f) => f.type.startsWith('image/'));
+  if (!list.length) return;
+  let loaded = 0;
+  for (const file of list) {
+    const url = URL.createObjectURL(file);
+    loadImage(url).then((img) => {
+      state.photos.push({ name: file.name.replace(/\.[^.]+$/, ''), img, src: url });
+      loaded++;
+      if (loaded === list.length) { refreshPhotoUI(); renderPreview(); }
+    }).catch(() => URL.revokeObjectURL(url));
   }
 }
 
-/* ---------- cover rendering ---------- */
-
-function panelRect(p, W, H) {
-  const contentH = H * (1 - CAPTION_FRAC);
-  const gap = Math.max(3, Math.round(W * 0.005));
-  const x = p.rect[0] * W + gap / 2;
-  const y = p.rect[1] * contentH + gap / 2;
-  const w = p.rect[2] * W - gap;
-  const h = p.rect[3] * contentH - gap;
-  return [x, y, w, h];
-}
-
-function drawPhotoCover(c, img, x, y, w, h, zoom, ox, oy) {
-  const iw = img.naturalWidth || img.width;
-  const ih = img.naturalHeight || img.height;
-  const scale = Math.max(w / iw, h / ih) * zoom;
-  const dw = iw * scale;
-  const dh = ih * scale;
-  c.drawImage(img, x + (w - dw) / 2 + ox, y + (h - dh) / 2 + oy, dw, dh);
-}
-
-function drawPalm(c, x, y, s, color) {
-  c.strokeStyle = color;
-  c.lineCap = "round";
-  c.lineWidth = Math.max(2, s * 0.045);
-  c.beginPath();
-  c.moveTo(x, y);
-  c.quadraticCurveTo(x + s * 0.08, y - s * 0.55, x - s * 0.06, y - s);
-  c.stroke();
-  const tx = x - s * 0.06;
-  const ty = y - s;
-  c.lineWidth = Math.max(2, s * 0.028);
-  for (let a = -155; a <= 155; a += 44) {
-    const rad = (a * Math.PI) / 180;
-    const mx = tx + Math.cos(rad) * s * 0.34;
-    const my = ty + Math.sin(rad) * s * 0.12 - s * 0.05;
-    const ex = tx + Math.cos(rad) * s * 0.62;
-    const ey = ty + Math.sin(rad) * s * 0.34 + s * 0.18;
-    c.beginPath();
-    c.moveTo(tx, ty);
-    c.quadraticCurveTo(mx, my, ex, ey);
-    c.stroke();
-  }
-}
-
-function drawHalftone(c, x, y, w, h, color) {
-  const step = Math.max(10, w / 34);
-  for (let gy = y; gy < y + h; gy += step) {
-    for (let gx = x; gx < x + w; gx += step) {
-      const t = (gx - x) / w;
-      const r = step * 0.16 * (0.4 + t);
-      c.fillStyle = color;
-      c.globalAlpha = 0.16 + 0.14 * t;
-      c.beginPath();
-      c.arc(gx, gy, r, 0, Math.PI * 2);
-      c.fill();
-    }
-  }
-  c.globalAlpha = 1;
-}
-
-function renderCover(c, W, H) {
-  const grade = GRADES[state.grade];
-  c.save();
-  c.fillStyle = "#12081f";
-  c.fillRect(0, 0, W, H);
-
-  // panels
-  for (let i = 0; i < PANELS.length; i++) {
-    const p = PANELS[i];
-    const st = state.panels[i];
-    const [x, y, w, h] = panelRect(p, W, H);
-    c.save();
-    c.beginPath();
-    c.rect(x, y, w, h);
-    c.clip();
-    const photo = state.photos.find((ph) => ph.id === st.photoId);
-    if (photo) {
-      drawPhotoCover(c, photo.img, x, y, w, h, st.zoom, st.ox, st.oy);
-    } else {
-      const g = c.createLinearGradient(x, y, x, y + h);
-      g.addColorStop(0, "#3d1560");
-      g.addColorStop(1, "#12081f");
-      c.fillStyle = g;
-      c.fillRect(x, y, w, h);
-    }
-    // sunset grade wash over the photo
-    const wash = c.createLinearGradient(x, y, x + w * 0.4, y + h);
-    wash.addColorStop(0, grade.tint[0]);
-    wash.addColorStop(0.55, grade.tint[1]);
-    wash.addColorStop(1, grade.tint[2]);
-    c.globalCompositeOperation = "overlay";
-    c.fillStyle = wash;
-    c.fillRect(x, y, w, h);
-    c.globalCompositeOperation = "source-over";
-    // panel frame
-    c.strokeStyle = "rgba(255,255,255,0.38)";
-    c.lineWidth = Math.max(2, W * 0.002);
-    c.strokeRect(x, y, w, h);
-    c.restore();
-  }
-
-  // caption band
-  const capY = H * (1 - CAPTION_FRAC);
-  const capH = H * CAPTION_FRAC;
-  const band = c.createLinearGradient(0, capY, 0, H);
-  band.addColorStop(0, grade.band[0]);
-  band.addColorStop(0.55, grade.band[1]);
-  band.addColorStop(1, grade.band[2]);
-  c.fillStyle = band;
-  c.fillRect(0, capY, W, capH);
-  c.fillStyle = "rgba(255,255,255,0.5)";
-  c.fillRect(0, capY, W, Math.max(2, H * 0.003));
-
-  // sun disc, low on the right of the band
-  const sunR = capH * 0.85;
-  const sunX = W * 0.88;
-  const sunY = capY + capH * 0.62;
-  const glow = c.createRadialGradient(sunX, sunY, sunR * 0.1, sunX, sunY, sunR * 2.1);
-  glow.addColorStop(0, grade.sun[1]);
-  glow.addColorStop(1, "rgba(255,122,61,0)");
-  c.globalAlpha = 0.55;
-  c.fillStyle = glow;
-  c.fillRect(sunX - sunR * 2.2, sunY - sunR * 2.2, sunR * 4.4, sunR * 4.4);
-  c.globalAlpha = 1;
-  const disc = c.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR);
-  disc.addColorStop(0, grade.sun[0]);
-  disc.addColorStop(1, grade.sun[1]);
-  c.fillStyle = disc;
-  c.beginPath();
-  c.arc(sunX, sunY, sunR, 0, Math.PI * 2);
-  c.fill();
-  // retro slices through the sun
-  c.fillStyle = grade.band[1];
-  for (let k = 0; k < 3; k++) {
-    const yy = sunY + sunR * (0.1 + 0.28 * k);
-    c.fillRect(sunX - sunR, yy, sunR * 2, Math.max(2, capH * 0.03));
-  }
-
-  // palm silhouettes at the band edges + halftone dots
-  drawPalm(c, W * 0.035, H - 4, capH * 1.5, "rgba(10,4,22,0.9)");
-  drawPalm(c, W * 0.74, H - 4, capH * 1.1, "rgba(10,4,22,0.75)");
-  drawHalftone(c, W * 0.42, capY + capH * 0.08, W * 0.3, capH * 0.84, "#ffffff");
-
-  // caption text
-  const titleSize = capH * 0.52;
-  const subSize = capH * 0.19;
-  const tx = W * 0.045;
-  const titleBase = capY + capH * 0.56;
-  c.textBaseline = "alphabetic";
-  try { c.letterSpacing = Math.max(1, W * 0.002) + "px"; } catch (e) { /* older canvas */ }
-  c.font = "700 " + Math.round(titleSize) + 'px "Leonida Sans", "Liberation Sans", Arial, sans-serif';
-  const title = (state.title || "LEONIDA NIGHTS").toUpperCase();
-  if (state.titleStyle === "gradient") {
-    const tg = c.createLinearGradient(tx, titleBase - titleSize, tx + W * 0.5, titleBase);
-    tg.addColorStop(0, "#ffe9a3");
-    tg.addColorStop(0.5, "#ff7a3d");
-    tg.addColorStop(1, "#ff2e88");
-    c.fillStyle = tg;
-    c.fillText(title, tx, titleBase);
-    c.strokeStyle = "rgba(20,5,35,0.85)";
-    c.lineWidth = Math.max(2, titleSize * 0.04);
-    c.strokeText(title, tx, titleBase);
-  } else if (state.titleStyle === "glow") {
-    c.shadowColor = "#ff2e88";
-    c.shadowBlur = titleSize * 0.35;
-    c.fillStyle = grade.title;
-    c.fillText(title, tx, titleBase);
-    c.shadowBlur = 0;
-    c.fillText(title, tx, titleBase);
-  } else {
-    c.fillStyle = "rgba(18,6,32,0.9)";
-    c.fillText(title, tx, titleBase);
-    c.strokeStyle = grade.title;
-    c.lineWidth = Math.max(2, titleSize * 0.055);
-    c.lineJoin = "round";
-    c.strokeText(title, tx, titleBase);
-    c.fillStyle = grade.title;
-    c.fillText(title, tx, titleBase);
-  }
-  c.font = "400 " + Math.round(subSize) + 'px "Leonida Sans", "Liberation Sans", Arial, sans-serif';
-  c.fillStyle = "rgba(255,236,190,0.92)";
-  c.fillText(state.subtitle || "", tx, capY + capH * 0.86);
-  c.restore();
-}
+/* -------------------------------------------------------------- editor */
+const canvas = $('coverCanvas');
+const ctx = canvas.getContext('2d');
 
 function renderPreview() {
-  renderCover(ctx, canvas.width, canvas.height);
+  const [W, H] = SIZES[state.size];
+  canvas.width = W;
+  canvas.height = H;
+  renderCover(ctx, W, H, state);
 }
 
-/* ---------- editor UI ---------- */
-
-function buildTray() {
-  const tray = $("#tray");
-  tray.innerHTML = "";
+function refreshPhotoUI() {
+  const strip = $('photoStrip');
+  strip.innerHTML = '';
   if (!state.photos.length) {
-    tray.innerHTML = '<span class="tray-empty">No photos yet — add your own, or use the samples.</span>';
-    return;
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.textContent = 'No photos yet — add your own or load the samples.';
+    strip.appendChild(p);
   }
-  for (const ph of state.photos) {
-    const img = document.createElement("img");
-    img.src = ph.url;
-    img.alt = ph.name;
-    img.title = ph.name + " — click to put it in the selected panel";
-    if (state.panels.some((p) => p.photoId === ph.id)) img.classList.add("assigned");
-    img.addEventListener("click", () => {
-      const panel = state.panels.find((p) => p.id === state.selected);
-      if (panel) {
-        panel.photoId = ph.id;
-        panel.zoom = 1;
-        panel.ox = 0;
-        panel.oy = 0;
-        buildPanelEditors();
-        renderPreview();
-      }
+  state.photos.forEach((photo, i) => {
+    const thumb = document.createElement('img');
+    thumb.className = 'thumb';
+    thumb.src = photo.src;
+    thumb.alt = photo.name;
+    thumb.title = photo.name;
+    if (state.panels[state.selectedPanel].photo === i) thumb.classList.add('selected');
+    thumb.addEventListener('click', () => {
+      state.panels[state.selectedPanel].photo = i;
+      refreshPhotoUI();
+      renderPreview();
     });
-    tray.appendChild(img);
-  }
+    strip.appendChild(thumb);
+  });
+
+  const picker = $('photoPicker');
+  picker.innerHTML = '';
+  const none = document.createElement('option');
+  none.value = '-1';
+  none.textContent = '— no photo —';
+  picker.appendChild(none);
+  state.photos.forEach((photo, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = `${i + 1}. ${photo.name}`;
+    picker.appendChild(opt);
+  });
+  picker.value = String(state.panels[state.selectedPanel].photo ?? -1);
+  $('zoomSlider').value = String(state.panels[state.selectedPanel].zoom);
 }
 
-function buildPanelEditors() {
-  const wrap = $("#panelEditors");
-  wrap.innerHTML = "";
-  $("#selName").textContent = "— " + PANELS.find((p) => p.id === state.selected).name;
-  for (let i = 0; i < PANELS.length; i++) {
-    const p = PANELS[i];
-    const st = state.panels[i];
-    const box = document.createElement("div");
-    box.className = "panel-editor" + (state.selected === p.id ? " selected" : "");
-    box.innerHTML =
-      "<h3>" + p.name + "</h3>" +
-      '<label>Photo <select data-panel="' + p.id + '"></select></label>' +
-      '<label>Zoom <span class="zoom-read">' + st.zoom.toFixed(2) + "×</span>" +
-      '<input type="range" min="0.6" max="2.6" step="0.05" value="' + st.zoom +
-      '" data-zoom="' + p.id + '"></label>' +
-      '<button class="btn" data-center="' + p.id + '">Centre photo</button>';
-    const select = box.querySelector("select");
-    const none = document.createElement("option");
-    none.value = "";
-    none.textContent = "(empty)";
-    select.appendChild(none);
-    for (const ph of state.photos) {
-      const opt = document.createElement("option");
-      opt.value = ph.id;
-      opt.textContent = ph.name;
-      if (ph.id === st.photoId) opt.selected = true;
-      select.appendChild(opt);
-    }
-    select.addEventListener("change", () => {
-      st.photoId = select.value || null;
-      st.zoom = 1;
-      st.ox = 0;
-      st.oy = 0;
-      buildTray();
-      buildPanelEditors();
-      renderPreview();
-    });
-    const range = box.querySelector("input[type=range]");
-    range.addEventListener("input", () => {
-      st.zoom = parseFloat(range.value);
-      box.querySelector(".zoom-read").textContent = st.zoom.toFixed(2) + "×";
-      renderPreview();
-    });
-    box.querySelector("[data-center]").addEventListener("click", () => {
-      st.ox = 0;
-      st.oy = 0;
-      st.zoom = 1;
-      buildPanelEditors();
-      renderPreview();
-    });
-    box.addEventListener("click", (ev) => {
-      if (ev.target.tagName === "SELECT" || ev.target.tagName === "INPUT" || ev.target.tagName === "BUTTON") return;
-      state.selected = p.id;
-      buildPanelEditors();
-      renderPreview();
-    });
-    wrap.appendChild(box);
-  }
+function selectPanel(key) {
+  state.selectedPanel = key;
+  document.querySelectorAll('.panel-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.panel === key);
+  });
+  refreshPhotoUI();
+  renderPreview();
 }
 
-function bindControls() {
-  $("#fileInput").addEventListener("change", (ev) => {
-    for (const file of ev.target.files || []) addUpload(file);
-    ev.target.value = "";
-  });
-  const dz = $("#dropZone");
-  ["dragenter", "dragover"].forEach((evt) =>
-    dz.addEventListener(evt, (ev) => { ev.preventDefault(); dz.classList.add("dragging"); }));
-  ["dragleave", "drop"].forEach((evt) =>
-    dz.addEventListener(evt, (ev) => { ev.preventDefault(); dz.classList.remove("dragging"); }));
-  dz.addEventListener("drop", (ev) => {
-    for (const file of ev.dataTransfer.files || []) addUpload(file);
-  });
-  $("#titleInput").addEventListener("input", (ev) => { state.title = ev.target.value; renderPreview(); });
-  $("#subInput").addEventListener("input", (ev) => { state.subtitle = ev.target.value; renderPreview(); });
-  document.querySelectorAll('input[name="titleStyle"]').forEach((r) =>
-    r.addEventListener("change", () => { state.titleStyle = r.value; renderPreview(); }));
-  document.querySelectorAll('input[name="exsize"]').forEach((r) =>
-    r.addEventListener("change", () => { state.exportSize = r.value; }));
-  document.querySelectorAll(".grade-btn").forEach((btn) =>
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".grade-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      state.grade = btn.dataset.grade;
-      renderPreview();
-    }));
-
-  // canvas: click selects a panel, drag pans its photo, wheel zooms it
-  let drag = null;
-  function toCanvas(ev) {
-    const r = canvas.getBoundingClientRect();
-    return [(ev.clientX - r.left) * (canvas.width / r.width),
-            (ev.clientY - r.top) * (canvas.height / r.height)];
-  }
-  function hitPanel(cx, cy) {
-    for (let i = PANELS.length - 1; i >= 0; i--) {
-      const [x, y, w, h] = panelRect(PANELS[i], canvas.width, canvas.height);
-      if (cx >= x && cx <= x + w && cy >= y && cy <= y + h) return PANELS[i].id;
-    }
-    return null;
-  }
-  canvas.addEventListener("pointerdown", (ev) => {
-    const [cx, cy] = toCanvas(ev);
-    const hit = hitPanel(cx, cy);
-    if (hit) {
-      state.selected = hit;
-      buildPanelEditors();
-      renderPreview();
-      drag = { x: cx, y: cy, panel: state.panels.find((p) => p.id === hit) };
-      canvas.setPointerCapture(ev.pointerId);
-    }
-  });
-  canvas.addEventListener("pointermove", (ev) => {
-    if (!drag) return;
-    const [cx, cy] = toCanvas(ev);
-    drag.panel.ox += cx - drag.x;
-    drag.panel.oy += cy - drag.y;
-    drag.x = cx;
-    drag.y = cy;
-    renderPreview();
-  });
-  canvas.addEventListener("pointerup", () => { drag = null; });
-  canvas.addEventListener("wheel", (ev) => {
-    ev.preventDefault();
-    const panel = state.panels.find((p) => p.id === state.selected);
-    if (!panel) return;
-    panel.zoom = Math.min(3, Math.max(0.6, panel.zoom * Math.exp(-ev.deltaY * 0.0012)));
-    buildPanelEditors();
-    renderPreview();
-  }, { passive: false });
-
-  $("#exportBtn").addEventListener("click", exportPng);
-}
-
-function addUpload(file) {
-  if (!file || !file.type.startsWith("image/")) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    loadImage(reader.result).then((img) => {
-      const ph = addPhoto(img, file.name, reader.result);
-      const panel = state.panels.find((p) => p.id === state.selected);
-      if (panel) {
-        panel.photoId = ph.id;
-        panel.zoom = 1;
-        panel.ox = 0;
-        panel.oy = 0;
-      }
-      buildPanelEditors();
-      renderPreview();
-    });
+function canvasPoint(ev) {
+  const r = canvas.getBoundingClientRect();
+  const [W, H] = SIZES[state.size];
+  return {
+    x: (ev.clientX - r.left) * (W / r.width),
+    y: (ev.clientY - r.top) * (H / r.height),
+    W, H,
   };
-  reader.readAsDataURL(file);
 }
 
-function exportPng() {
-  const [w, h] = state.exportSize.split("x").map(Number);
-  const off = document.createElement("canvas");
-  off.width = w;
-  off.height = h;
-  renderCover(off.getContext("2d"), w, h);
-  const status = $("#status");
-  status.textContent = "Rendering " + w + "×" + h + "…";
+function hitPanel(x, y, W, H) {
+  const lay = layoutFor(W, H);
+  for (const key of ['hero', 'side1', 'side2', 'strip']) {
+    const rect = lay[key];
+    if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) return key;
+  }
+  return null;
+}
+
+let drag = null;
+canvas.addEventListener('pointerdown', (ev) => {
+  const p = canvasPoint(ev);
+  const key = hitPanel(p.x, p.y, p.W, p.H);
+  if (!key) return;
+  selectPanel(key);
+  drag = { x: p.x, y: p.y, panel: state.panels[key], rect: layoutFor(p.W, p.H)[key] };
+  canvas.setPointerCapture(ev.pointerId);
+});
+canvas.addEventListener('pointermove', (ev) => {
+  if (!drag) return;
+  const p = canvasPoint(ev);
+  const panel = drag.panel;
+  panel.ox += (p.x - drag.x) / drag.rect.w;
+  panel.oy += (p.y - drag.y) / drag.rect.h;
+  panel.ox = Math.max(-0.6, Math.min(0.6, panel.ox));
+  panel.oy = Math.max(-0.6, Math.min(0.6, panel.oy));
+  drag.x = p.x;
+  drag.y = p.y;
+  renderPreview();
+});
+canvas.addEventListener('pointerup', () => { drag = null; });
+canvas.addEventListener('wheel', (ev) => {
+  ev.preventDefault();
+  const panel = state.panels[state.selectedPanel];
+  panel.zoom = Math.max(1, Math.min(3, panel.zoom * (ev.deltaY < 0 ? 1.08 : 0.93)));
+  $('zoomSlider').value = String(panel.zoom);
+  renderPreview();
+}, { passive: false });
+
+$('fileInput').addEventListener('change', (ev) => {
+  addFiles(ev.target.files);
+  ev.target.value = '';
+});
+$('loadSamplesBtn').addEventListener('click', loadSamples);
+
+const dropZone = $('dropZone');
+['dragenter', 'dragover'].forEach((name) => dropZone.addEventListener(name, (ev) => {
+  ev.preventDefault();
+  dropZone.classList.add('dragging');
+}));
+['dragleave', 'drop'].forEach((name) => dropZone.addEventListener(name, (ev) => {
+  ev.preventDefault();
+  dropZone.classList.remove('dragging');
+}));
+dropZone.addEventListener('drop', (ev) => addFiles(ev.dataTransfer.files));
+
+document.querySelectorAll('.panel-btn').forEach((b) => {
+  b.addEventListener('click', () => selectPanel(b.dataset.panel));
+});
+$('photoPicker').addEventListener('change', (ev) => {
+  state.panels[state.selectedPanel].photo = Number(ev.target.value);
+  refreshPhotoUI();
+  renderPreview();
+});
+$('zoomSlider').addEventListener('input', (ev) => {
+  state.panels[state.selectedPanel].zoom = Number(ev.target.value);
+  renderPreview();
+});
+$('titleInput').addEventListener('input', (ev) => {
+  state.title = (ev.target.value || 'LEONIDA').toUpperCase();
+  renderPreview();
+});
+$('subtitleInput').addEventListener('input', (ev) => {
+  state.subtitle = (ev.target.value || '').toUpperCase();
+  renderPreview();
+});
+
+function chipRow(id, key, value) {
+  document.querySelectorAll(`#${id} .chip`).forEach((c) => {
+    c.classList.toggle('active', c.dataset[key] === value);
+  });
+}
+$('titleStyleRow').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-style]');
+  if (!b) return;
+  state.titleStyle = b.dataset.style;
+  chipRow('titleStyleRow', 'style', state.titleStyle);
+  renderPreview();
+});
+$('gradeRow').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-grade]');
+  if (!b) return;
+  state.grade = b.dataset.grade;
+  chipRow('gradeRow', 'grade', state.grade);
+  renderPreview();
+});
+$('sizeRow').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-size]');
+  if (!b) return;
+  state.size = b.dataset.size;
+  chipRow('sizeRow', 'size', state.size);
+  renderPreview();
+});
+
+$('exportBtn').addEventListener('click', () => {
+  const [W, H] = SIZES[state.size];
+  const off = document.createElement('canvas');
+  off.width = W;
+  off.height = H;
+  renderCover(off.getContext('2d'), W, H, state);
   off.toBlob((blob) => {
-    if (!blob) {
-      status.textContent = "Export failed — please try again.";
-      return;
-    }
-    const a = document.createElement("a");
+    if (!blob) return;
+    const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = "leonida-nights-" + w + "x" + h + ".png";
+    a.download = `leonida-nights-${state.size}.png`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    status.textContent = "Exported " + w + "×" + h + " PNG (" + Math.round(blob.size / 1024) + " KB).";
-  }, "image/png");
-}
+  }, 'image/png');
+});
 
-/* ---------- boot + screenshot mode ---------- */
-
-function applyParams() {
-  const q = new URLSearchParams(location.search);
-  if (q.get("title")) { state.title = q.get("title"); $("#titleInput").value = state.title; }
-  if (q.get("sub")) { state.subtitle = q.get("sub"); $("#subInput").value = state.subtitle; }
-  if (q.get("grade") && GRADES[q.get("grade")]) {
-    state.grade = q.get("grade");
-    document.querySelectorAll(".grade-btn").forEach((b) =>
-      b.classList.toggle("active", b.dataset.grade === state.grade));
-  }
-  if (q.get("style") && ["outline", "gradient", "glow"].includes(q.get("style"))) {
-    state.titleStyle = q.get("style");
-    const r = document.querySelector('input[name="titleStyle"][value="' + state.titleStyle + '"]');
-    if (r) r.checked = true;
-  }
-  return q;
-}
-
-async function boot() {
-  const q = applyParams();
-  bindControls();
-  buildTray();
-  buildPanelEditors();
+/* --------------------------------------------------------- cover-only */
+/* ?shot=cover&size=1920x1080 renders one exported cover full-screen,
+ * for the entry's screenshots: the app's own drawing of its export. */
+async function renderCoverOnly(params) {
+  document.querySelector('.topbar').hidden = true;
+  $('editorView').hidden = true;
+  const view = $('coverView');
+  view.hidden = false;
+  if (params.get('grade') && GRADES[params.get('grade')]) state.grade = params.get('grade');
+  if (params.get('style')) state.titleStyle = params.get('style');
+  if (params.get('title')) state.title = params.get('title').toUpperCase();
+  if (params.get('subtitle')) state.subtitle = params.get('subtitle').toUpperCase();
+  const size = params.get('size') || '1920x1080';
+  if (SIZES[size]) state.size = size;
   await loadSamples();
-  if (document.fonts && document.fonts.load) {
-    try {
-      await document.fonts.load('700 40px "Leonida Sans"');
-      await document.fonts.load('400 20px "Leonida Sans"');
-    } catch (e) { /* fall back to system fonts */ }
-  }
-  const shot = q.get("shot");
-  if (shot === "cover") {
-    const w = parseInt(q.get("w") || "1080", 10);
-    const h = parseInt(q.get("h") || "1080", 10);
-    canvas.width = w;
-    canvas.height = h;
-    canvas.style.width = "100vw";
-    canvas.style.height = "100vh";
-    document.body.classList.add("shot-cover");
-  }
-  renderPreview();
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(() => renderPreview());
-  }
+  try { await document.fonts.ready; } catch (e) { /* fonts fall back */ }
+  const [W, H] = SIZES[state.size];
+  const c = $('coverOnlyCanvas');
+  c.width = W;
+  c.height = H;
+  renderCover(c.getContext('2d'), W, H, state);
+  window.__coverReady = true;
 }
 
-boot();
+/* ---------------------------------------------------------------- boot */
+(async () => {
+  const params = new URLSearchParams(location.search);
+  if (params.get('shot') === 'cover') {
+    await renderCoverOnly(params);
+    return;
+  }
+  await loadSamples();
+  try { await document.fonts.ready; } catch (e) { /* fonts fall back */ }
+  renderPreview();
+  window.__coverReady = true;
+})();
