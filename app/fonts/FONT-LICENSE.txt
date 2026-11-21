@@ -1,12 +1,13 @@
-Fonts shipped with Leonida Nights Cover Maker
-================================================
+Liberation Sans — SIL Open Font License, Version 1.1
+----------------------------------------------------
+The files LiberationSans-Bold.ttf and LiberationSans-Regular.ttf in this
+folder are the Liberation Fonts, copyright (c) 2012 Red Hat, Inc., released
+under the SIL Open Font License, Version 1.1 (26 February 2007).
 
-LiberationSans-Bold.ttf and LiberationSans-Regular.ttf are the
-Liberation Sans fonts, released under the SIL Open Font License,
-Version 1.1 (26 February 2007). The full license text is available
-at https://openfontlicense.org/ and in the Liberation fonts
-package shipped by most Linux distributions.
+The full license text is available at:
+https://openfontlicense.org/ — SIL OPEN FONT LICENSE Version 1.1.
 
-The fonts are used here only as text rendering assets inside this
-app. No Rockstar Games font, logo or artwork is used anywhere in
-this project.
+In short: the fonts may be used, studied, copied, modified and redistributed
+freely, including in commercial products, as long as they are not sold on
+their own and this license note travels with them. No Rockstar Games font is
+used anywhere in this app.
