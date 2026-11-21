@@ -1,4 +1,3 @@
 out/
-*.tgz
-*.tar.gz
+out2/
 node_modules/

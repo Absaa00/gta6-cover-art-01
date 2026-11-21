@@ -1,9 +1,9 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vice Cover Studio — GTA-style poster maker</title>
+<title>Vice City Cover Lab — GTA 6-style cover art maker</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,106 +11,88 @@
   <div class="brand">
     <span class="brand-mark">VC</span>
     <div>
-      <h1>Vice Cover Studio</h1>
-      <p>Turn your photo into a multi-panel sunset poster — free, offline, nothing uploads.</p>
+      <h1>Vice City Cover Lab</h1>
+      <p>Turn your photos + a caption into multi-panel GTA 6-style cover art. Offline, free, no upload.</p>
     </div>
   </div>
   <div class="top-actions">
-    <button id="shuffleBtn" type="button" title="Randomise the grade and layout">Shuffle look</button>
+    <button id="exportAllBtn" class="btn btn-primary">Export all three sizes</button>
   </div>
 </header>
 
-<main class="workbench">
-  <section class="controls" aria-label="Cover controls">
-    <div class="group">
-      <h2>1 · Your photos</h2>
-      <p class="hint">Photos stay on this machine. Drop files anywhere on this panel or pick them.</p>
-      <div id="dropZone" class="dropzone" tabindex="0">
-        <strong>Drop photos here</strong>
-        <span>or</span>
-        <label class="file-btn">Choose photos
+<main class="workspace">
+  <section class="stage-wrap">
+    <canvas id="stage" width="1080" height="1080" aria-label="Cover preview"></canvas>
+    <p class="stage-hint">Drag a panel to pan its photo &middot; use the sliders below to zoom</p>
+  </section>
+
+  <aside class="panel">
+    <section class="group">
+      <h2>1 &middot; Layout</h2>
+      <div class="row" id="layoutRow">
+        <button data-layout="strip" class="chip active">Strip &middot; 3 panels</button>
+        <button data-layout="hero" class="chip">Hero + Duo</button>
+        <button data-layout="quad" class="chip">Quad &middot; 2&times;2</button>
+      </div>
+    </section>
+
+    <section class="group">
+      <h2>2 &middot; Photos</h2>
+      <p class="muted">Upload up to 3 photos, or load a built-in scene. Drop a file onto a panel to fill it.</p>
+      <div class="row">
+        <label class="btn btn-ghost file-btn">Upload photos
           <input id="fileInput" type="file" accept="image/*" multiple hidden>
         </label>
+        <button id="sampleBoulevardBtn" class="btn btn-ghost">Load sample: Boulevard Dusk</button>
+        <button id="samplePierBtn" class="btn btn-ghost">Load sample: Pier Neon</button>
       </div>
-      <div id="library" class="library" aria-label="Photo library"></div>
-    </div>
+      <div id="panelControls" class="panel-controls"></div>
+    </section>
 
-    <div class="group">
-      <h2>2 · Layout</h2>
-      <div class="seg" id="layoutSeg" role="group" aria-label="Layout">
-        <button type="button" data-layout="sunset-strip" class="on">Sunset Strip</button>
-        <button type="button" data-layout="neon-grid">Neon Grid</button>
-        <button type="button" data-layout="boulevard-trio">Boulevard Trio</button>
-      </div>
-      <p class="hint" id="layoutHint">One big hero shot on top, two smaller panels below.</p>
-    </div>
-
-    <div class="group">
-      <h2>3 · Colour grade</h2>
-      <div class="seg" id="gradeSeg" role="group" aria-label="Colour grade">
-        <button type="button" data-grade="vice-sunset" class="on">Vice Sunset</button>
-        <button type="button" data-grade="neon-nights">Neon Nights</button>
-        <button type="button" data-grade="palm-noir">Palm Noir</button>
-      </div>
-    </div>
-
-    <div class="group">
-      <h2>4 · Panels</h2>
-      <div class="seg" id="panelTabs" role="group" aria-label="Panel"></div>
-      <label class="field">Photo in this panel
-        <select id="panelPhoto"></select>
-      </label>
-      <label class="field">Zoom <output id="zoomOut">1.00×</output>
-        <input id="zoomRange" type="range" min="1" max="3" step="0.01" value="1">
-      </label>
-      <label class="field">Pan left–right <output id="panXOut">0</output>
-        <input id="panXRange" type="range" min="-0.5" max="0.5" step="0.01" value="0">
-      </label>
-      <label class="field">Pan up–down <output id="panYOut">0</output>
-        <input id="panYRange" type="range" min="-0.5" max="0.5" step="0.01" value="0">
-      </label>
-      <button id="resetCropBtn" type="button" class="ghost">Reset crop for this panel</button>
-    </div>
-
-    <div class="group">
-      <h2>5 · Lettering</h2>
+    <section class="group">
+      <h2>3 &middot; Caption</h2>
       <label class="field">Title
-        <input id="titleInput" type="text" value="NEON SUNSET" maxlength="28">
+        <input id="titleInput" type="text" value="Sunset Heist" maxlength="48">
       </label>
       <label class="field">Subtitle
-        <input id="subtitleInput" type="text" value="a boulevard story" maxlength="48">
+        <input id="subtitleInput" type="text" value="Vice City &middot; Summer 2026" maxlength="64">
       </label>
-      <label class="field">Title size <output id="titleSizeOut">100%</output>
-        <input id="titleSizeRange" type="range" min="60" max="140" step="5" value="100">
-      </label>
-    </div>
-
-    <div class="group">
-      <h2>6 · Export PNG</h2>
-      <p class="hint">Pick a post size. The file downloads straight from your browser.</p>
-      <div class="export-row">
-        <button type="button" class="export" data-size="1080x1080">Square · 1080×1080</button>
-        <button type="button" class="export" data-size="1080x1350">Portrait · 1080×1350</button>
-        <button type="button" class="export" data-size="1920x1080">Wide · 1920×1080</button>
+      <div class="row" id="captionStyleRow">
+        <button data-caption-style="block" class="chip active">White Block</button>
+        <button data-caption-style="neon" class="chip">Neon Pink</button>
+        <button data-caption-style="gold" class="chip">Sunset Gold</button>
       </div>
-      <p class="status" id="statusLine" role="status">Ready. Pick a sample photo below to start.</p>
-    </div>
-  </section>
+      <div class="row" id="captionPosRow">
+        <button data-caption-pos="top" class="chip active">Caption top</button>
+        <button data-caption-pos="bottom" class="chip">Caption bottom</button>
+      </div>
+    </section>
 
-  <section class="stage" aria-label="Live preview">
-    <div class="stage-head">
-      <span>Live preview</span>
-      <span id="sizeLabel">1080 × 1080</span>
-    </div>
-    <canvas id="preview" width="900" height="900"></canvas>
-    <p class="hint">What you see is what the PNG gets — same panels, grade and lettering.</p>
-  </section>
+    <section class="group">
+      <h2>4 &middot; Colour grade</h2>
+      <div class="row" id="gradeRow">
+        <button data-grade="sunset" class="chip active">Sunset</button>
+        <button data-grade="neon" class="chip">Neon Nights</button>
+        <button data-grade="palm" class="chip">Palm Dusk</button>
+      </div>
+    </section>
+
+    <section class="group">
+      <h2>5 &middot; Export PNG</h2>
+      <div class="row">
+        <button data-export="1080x1080" class="btn">1080 &times; 1080</button>
+        <button data-export="1080x1350" class="btn">1080 &times; 1350</button>
+        <button data-export="1920x1080" class="btn">1920 &times; 1080</button>
+      </div>
+      <p class="muted" id="exportStatus">Exports download as PNG files. Nothing leaves your machine.</p>
+    </section>
+  </aside>
 </main>
 
 <footer class="foot">
-  <p>Vice Cover Studio — an original poster maker. No game artwork, logos or fonts are used; lettering is drawn with system fonts. Photos never leave your machine.</p>
+  <p>Original art, made in your browser. No Rockstar logo, artwork or font. Photos stay on your machine.</p>
 </footer>
 
-<script src="cover.js"></script>
+<script type="module" src="src/shots.js"></script>
 </body>
 </html>

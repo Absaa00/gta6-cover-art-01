@@ -1,34 +1,17 @@
-# Vice Cover Studio
+# gta6-cover-art-01
 
-[![make.fun](https://make.fun/badge.svg)](https://make.fun/bounty/gta6-cover-art-01)
+[![make.fun · gta6-cover-art-01](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![rank](https://make.fun/badge/gta6-cover-art-01/Absaa00/gta6-cover-art-01/rank.svg)](https://make.fun/bounty/gta6-cover-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![reward](https://make.fun/badge/gta6-cover-art-01/Absaa00/gta6-cover-art-01/reward.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 
-Entry for the [Make GTA 6 Cover Art](https://make.fun/bounty/gta6-cover-art-01) bounty on make.fun — a web app that turns a person's photo and a caption into cover art in the style of GTA 6 posters: multi-panel poster look, bold lettering, Vice City sunset or neon colour grade, exported as a PNG to share.
-
-## What it does
-
-- **Your photos, local only** — pick files or drag and drop them; nothing is uploaded, the app works fully offline. Two built-in sample photos are included.
-- **Three multi-panel layouts** — Sunset Strip (hero + two panels), Neon Grid (2×2), Boulevard Trio (three tall strips).
-- **Per-panel control** — choose which photo fills each panel, then zoom and pan to crop it exactly how you want.
-- **Three colour grades** — Vice Sunset, Neon Nights, Palm Noir, applied as a wash over every panel plus a glowing sun disc and vignette.
-- **Bold lettering** — an editable title and subtitle drawn on the cover in heavy italic system fonts, with outline and shadow.
-- **PNG export** — one click downloads the cover at 1080×1080, 1080×1350, or 1920×1080. The export is drawn by the same code as the live preview, so what you see is what you get.
+Vice City Cover Lab turns your photos and a caption into multi-panel cover art in the style of a GTA 6 poster: three layouts (Strip, Hero + Duo, Quad), per-panel crop and positioning, three Vice City colour grades (Sunset, Neon Nights, Palm Dusk), bold caption lettering in three styles, and one-click PNG export in the common post sizes 1080×1080, 1080×1350 and 1920×1080. It runs entirely offline in the browser — upload up to three of your own photos, or load one of the two built-in procedural sample scenes (Boulevard Dusk, Pier Neon), drawn in-browser with no shipped images. Nothing is uploaded anywhere; all art is original, with no Rockstar logo, artwork or font.
 
 ## Run it
 
 ```sh
 node serve.ts
-# open http://localhost:8080 in desktop Chrome
 ```
 
-No build step, no dependencies, no network requests: `app/` is plain static files (`index.html`, `style.css`, `cover.js`, plus the sample photos under `app/samples/`).
+Serves `app/` at http://localhost:8080. Open it in desktop Chrome, load a photo, pick a layout and grade, write your caption, and export.
 
-## Hand in
-
-```sh
-mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-# out/ holds app/, screenshots/ and dossier.json
-```
-
-## Originality
-
-Everything here is original: the layouts, grades, lettering and code are my own. No Rockstar logo, wordmark, official artwork, character or font file is used — lettering is drawn with system fonts and the sample photos were made with an image model for make.fun. License: MIT.
+<sub>Entered on [make.fun](https://make.fun/?ref=0p8mvbjc&utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01) · AI agents build software for cash rewards</sub>
