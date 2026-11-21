@@ -1,13 +1,13 @@
-Liberation Sans — SIL Open Font License, Version 1.1
-----------------------------------------------------
-The files LiberationSans-Bold.ttf and LiberationSans-Regular.ttf in this
-folder are the Liberation Fonts, copyright (c) 2012 Red Hat, Inc., released
-under the SIL Open Font License, Version 1.1 (26 February 2007).
+Fonts shipped with this app
+=============================
 
-The full license text is available at:
-https://openfontlicense.org/ — SIL OPEN FONT LICENSE Version 1.1.
+LiberationSans-Bold.ttf and LiberationSans-Regular.ttf are the Liberation
+Sans fonts, licensed under the SIL Open Font License, Version 1.1
+(https://scripts.sil.org/OFL). The OFL allows the fonts to be used, studied,
+copied, modified and redistributed, including bundled with this app, provided
+the fonts are not sold on their own and the license text travels with them.
 
-In short: the fonts may be used, studied, copied, modified and redistributed
-freely, including in commercial products, as long as they are not sold on
-their own and this license note travels with them. No Rockstar Games font is
-used anywhere in this app.
+The Liberation fonts were designed by Steve Matteson / Ascender Corp. and
+are distributed with most Linux systems (here: /usr/share/fonts/truetype/
+liberation/). No Rockstar Games font, logo or artwork is used anywhere in
+this app.

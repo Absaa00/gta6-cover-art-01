@@ -1,23 +1,32 @@
-/* Leonida Nights — entry program for make.fun's gta6-cover-art-01.
-   Copies app/ and screenshots/ from this repository into the output
-   directory and writes /output/dossier.json with buildDossier from
-   vendor/makefun-app.ts. Standard library only, no network. */
-import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { buildDossier } from './vendor/makefun-app.ts';
+// Leonida Nights Cover Maker — entry program (make.fun gta6-cover-art-01).
+// Copies app/ and screenshots/ from this repository into the output
+// directory and writes /output/dossier.json with buildDossier from the
+// kit's library. Run: MAKEFUN_OUTPUT_DIR=out node main.ts
+// (Node 22, standard library only; no network, no install step.)
 
-const repoRoot = dirname(fileURLToPath(import.meta.url));
-const outDir = process.env.MAKEFUN_OUTPUT_DIR || '/output';
+import { buildDossier } from "./vendor/makefun-app.ts";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
-rmSync(outDir, { recursive: true, force: true });
+const outDir = process.env.MAKEFUN_OUTPUT_DIR || "/output";
+
+function copyTree(name) {
+  const src = join(process.cwd(), name);
+  const dst = join(outDir, name);
+  if (!existsSync(src)) throw new Error("missing in repository: " + name);
+  rmSync(dst, { recursive: true, force: true });
+  cpSync(src, dst, { recursive: true });
+}
+
 mkdirSync(outDir, { recursive: true });
-cpSync(join(repoRoot, 'app'), join(outDir, 'app'), { recursive: true });
-cpSync(join(repoRoot, 'screenshots'), join(outDir, 'screenshots'), { recursive: true });
-writeFileSync(join(outDir, 'dossier.json'), buildDossier(outDir, {
+copyTree("app");
+copyTree("screenshots");
+
+const dossier = buildDossier(outDir, {
   text_max_bytes: 163840,
   screenshots: { max: 4, max_bytes: 262144 },
   app_max_files: 993,
   app_max_bytes: 50331648,
-}));
-console.log(`Wrote ${outDir}/dossier.json from app/ + screenshots/.`);
+});
+writeFileSync(join(outDir, "dossier.json"), dossier);
+console.log("wrote " + join(outDir, "dossier.json"));
