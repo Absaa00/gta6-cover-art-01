@@ -2,59 +2,55 @@
 [![rank](https://make.fun/badge/gta6-cover-art-01/Absaa00/gta6-cover-art-01/rank.svg)](https://make.fun/bounty/gta6-cover-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 [![reward](https://make.fun/badge/gta6-cover-art-01/Absaa00/gta6-cover-art-01/reward.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 
-# Leonida Nights — GTA 6 Style Cover Maker
+# Leonida Nights — Cover Maker
 
-Turn your photos into a multi-panel GTA 6-style poster: one large hero panel,
-two side panels and a sunset caption band with palm silhouettes, halftone dots
-and a purple-to-gold grade — then export it as a PNG to share.
-
-Built for the [make.fun GTA 6 Cover Art bounty](https://make.fun/bounty/gta6-cover-art-01).
+A static, offline web app that turns your own photos and a caption into GTA-style
+multi-panel poster cover art, in the spirit of the GTA 6 posters — and exports it
+as a PNG to share. Built for the [make.fun bounty](https://make.fun/bounty/gta6-cover-art-01).
 
 ## What it does
 
-- **Multi-panel poster** — hero panel on top, two side panels below, and a
-  caption band with a hand-drawn sunset, palm silhouettes and halftone dots.
-- **Any photo** — upload several photos (file picker or drag & drop), pick one
-  per panel, drag to reposition, scroll or slide to zoom. One photo can fill
-  several panels.
-- **Caption** — edit the title and subtitle live.
-- **4 colour grades** — Sunset, Neon Night, Palm Noir, Vice Pastel.
-- **3 title styles** — Outline, Gradient, Glow.
-- **Fast export** — one click downloads a PNG in 1080&times;1080, 1080&times;1350
-  or 1920&times;1080.
-- **100% offline** — static files only, no network requests, no libraries.
-  Photos never leave your machine. The three sample photos are drawn with
-  code (PIL) and bundled under `app/samples/`.
+- **Multi-panel poster**: one large hero panel, two side panels and a bottom strip,
+  plus a caption band with a sunset gradient, palm silhouettes and halftone dots.
+- **Any photo**: upload several photos (file picker or drag-and-drop), pick a photo
+  per panel, drag to reposition, scroll to zoom, use the zoom slider. One photo
+  can fill several panels.
+- **Caption**: edit the title and subtitle, with three title styles
+  (Gradient / Outline / Glow).
+- **Colour grades**: four presets — Sunset, Neon Night, Palm Noir, Vice Pastel —
+  each with its own sunset band, photo tint and title colours.
+- **One-click PNG export** in the three common post sizes:
+  1080 × 1080, 1080 × 1350 and 1920 × 1080.
+- Preview and export share the same `renderCover` function, so what you see is
+  exactly what you get.
 
-## Try it
+## Run it
+
+Serve `app/` with any static file server and open `index.html` in desktop Chrome,
+for example:
 
 ```sh
-cd app
-python3 -m http.server 8080
-# open http://localhost:8080 in desktop Chrome
+cd app && python3 -m http.server 8080
 ```
 
-Or open `app/index.html` through any static file server. `?view=cover&size=1920x1080`
-shows the cover alone, edge to edge.
+No build step, no libraries, no network requests. Photos are read on your own
+machine and never uploaded.
+
+## Original art
+
+Everything is original: the sample photos under `app/samples/` were drawn with
+Python PIL for this entry, the title uses a bold system sans stack styled with
+CSS and canvas (no font files), and there is no Rockstar Games logo, artwork or
+font anywhere in the app.
 
 ## Layout
 
-```
-app/
-  index.html   editor page
-  app.js       one-canvas renderer (preview and export share renderCover)
-  style.css    editor styling
-  fonts/       Liberation Sans (SIL OFL 1.1) + FONT-LICENSE.txt
-  samples/     three PIL-drawn sample photos
-main.ts        copies app/ + screenshots/ to /output, writes dossier.json
-screenshots/  cover + editor + square + portrait exports
-```
-
-## Originality
-
-Everything is original: no Rockstar Games logo, wordmark, official artwork,
-character or font is used. The only font is Liberation Sans under the SIL
-Open Font License (see `app/fonts/FONT-LICENSE.txt`).
+- `app/index.html` — editor page and cover-only view
+- `app/app.js` — state, the shared `renderCover` renderer, editor interactions
+- `app/style.css` — dark sunset editor theme
+- `app/samples/` — three PIL-drawn sample photos
+- `main.ts` — entry program: copies `app/` + `screenshots/` to `/output` and
+  writes `/output/dossier.json` via `buildDossier` from `vendor/makefun-app.ts`
 
 ## License
 
